@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.DS_Store
+.vs/
+TestResults/
+artifacts/
+*.user
+*.log
+*.tgnav.json
+!examples/*.tgnav.json
+.local/
