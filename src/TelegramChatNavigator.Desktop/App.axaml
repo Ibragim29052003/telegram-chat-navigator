@@ -1,0 +1,28 @@
+<Application xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="TelegramChatNavigator.Desktop.App" RequestedThemeVariant="Default">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="PageBrush">#F0F3F7</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBrush">#FFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="BubbleBrush">#EAF2FC</SolidColorBrush>
+          <SolidColorBrush x:Key="MutedBrush">#50627A</SolidColorBrush>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="PageBrush">#17212E</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBrush">#202E40</SolidColorBrush>
+          <SolidColorBrush x:Key="BubbleBrush">#253B52</SolidColorBrush>
+          <SolidColorBrush x:Key="MutedBrush">#B4C5D8</SolidColorBrush>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+    <Style Selector="Button"><Setter Property="CornerRadius" Value="7" /><Setter Property="Padding" Value="12,7" /></Style>
+    <Style Selector="TextBox"><Setter Property="CornerRadius" Value="6" /></Style>
+    <Style Selector="TextBlock.caption"><Setter Property="Foreground" Value="{DynamicResource MutedBrush}" /><Setter Property="FontSize" Value="12" /></Style>
+    <Style Selector="TextBlock.section"><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="FontSize" Value="16" /></Style>
+    <Style Selector="Button.primary"><Setter Property="Background" Value="#2779BC" /><Setter Property="Foreground" Value="White" /></Style>
+  </Application.Styles>
+</Application>
