@@ -7,6 +7,10 @@ internal enum AttachmentPlatform { MacOS, Windows, Linux, Other }
 
 internal static class SystemAttachmentOpener
 {
+    // Эти форматы передаём QuickTime, чтобы аудио не импортировалось в медиатеку Music.
+    private static readonly HashSet<string> QuickTimeExtensions = new(StringComparer.OrdinalIgnoreCase)
+    { ".mp4", ".mov", ".m4v", ".wav", ".mp3", ".m4a", ".aif", ".aiff", ".aac" };
+
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif",
@@ -37,12 +41,15 @@ internal static class SystemAttachmentOpener
 
         var start = platform switch
         {
-            AttachmentPlatform.MacOS => new ProcessStartInfo("/usr/bin/qlmanage"),
+            AttachmentPlatform.MacOS => new ProcessStartInfo("/usr/bin/open"),
             AttachmentPlatform.Linux => new ProcessStartInfo("xdg-open"),
             _ => throw new IOException("Открытие вложений поддерживается на macOS, Windows и Linux.")
         };
         start.UseShellExecute = false;
-        if (platform == AttachmentPlatform.MacOS) start.ArgumentList.Add("-p");
+        if (platform == AttachmentPlatform.MacOS && QuickTimeExtensions.Contains(Path.GetExtension(path)))
+        {
+            start.ArgumentList.Add("-a"); start.ArgumentList.Add("QuickTime Player");
+        }
         // Путь передаётся одним аргументом: пробелы и кавычки не становятся командами.
         start.ArgumentList.Add(path);
         return start;
@@ -62,7 +69,7 @@ internal static class SystemAttachmentOpener
             if (process.ExitCode != 0)
                 throw new IOException(platform == AttachmentPlatform.Linux
                     ? "Система не смогла открыть вложение. Проверьте наличие xdg-utils, графического сеанса и приложения по умолчанию для этого типа файла."
-                    : "Quick Look не смог открыть вложение. Проверьте файл и поддержку его формата в macOS.");
+                    : "macOS не смогла открыть вложение. Проверьте наличие приложения для этого типа файла.");
         }
         catch (Win32Exception e)
         {
@@ -70,7 +77,7 @@ internal static class SystemAttachmentOpener
             {
                 AttachmentPlatform.Windows => "Не удалось открыть вложение. Установите просмотрщик для этого типа файла и назначьте его приложением по умолчанию в Windows.",
                 AttachmentPlatform.Linux => "Не удалось запустить xdg-open. Установите xdg-utils и просмотрщик для этого типа файла; нужен графический сеанс Linux.",
-                _ => "Не удалось запустить Quick Look. Проверьте доступность системного просмотрщика macOS."
+                _ => "Не удалось открыть вложение средствами macOS. Проверьте наличие подходящего приложения."
             }, e);
         }
     }

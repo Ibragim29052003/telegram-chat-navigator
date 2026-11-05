@@ -16,8 +16,9 @@ public static class StateStore
 
     public static Task SaveAsync(string path, NavigatorSession session, CancellationToken ct = default)
     {
-        var relative = Path.GetRelativePath(Path.GetDirectoryName(Path.GetFullPath(path))!, session.Archive.RootPath);
-        var state = new NavigatorState(1, relative, session.Archive, session.Query, session.SelectedMessageId);
+        // Между разными дисками Windows относительного пути нет: .NET вернёт абсолютный.
+        var mediaRoot = Path.GetRelativePath(Path.GetDirectoryName(Path.GetFullPath(path))!, session.Archive.RootPath);
+        var state = new NavigatorState(1, mediaRoot, session.Archive, session.Query, session.SelectedMessageId);
         Validate(state);
         return AtomicWriteAsync(path, state, ct);
     }

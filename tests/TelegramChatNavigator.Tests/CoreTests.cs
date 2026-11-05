@@ -100,7 +100,8 @@ public sealed class CoreTests : IDisposable
         var state = await StateStore.LoadAsync(path);
         Assert.Equal(session.Query, state.Query); Assert.Equal(4, state.SelectedMessageId);
         Assert.Equal(a.RootPath, state.Archive.RootPath);
-        Assert.False(Path.IsPathRooted(state.MediaRoot));
+        var differentVolumes = !string.Equals(Path.GetPathRoot(path), Path.GetPathRoot(a.RootPath), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        Assert.Equal(differentVolumes, Path.IsPathRooted(state.MediaRoot));
         Assert.Equal(a.Messages.Select(m => m.Text), state.Archive.Messages.Select(m => m.Text));
         Assert.Single(ChatSearch.Find(state.Archive, state.Query));
     }

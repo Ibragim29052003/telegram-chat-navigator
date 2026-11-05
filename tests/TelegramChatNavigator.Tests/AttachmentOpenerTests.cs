@@ -17,8 +17,8 @@ public sealed class AttachmentOpenerTests : IDisposable
     {
         var path = FilePath("recording with spaces & quotes '.mp4");
         var start = SystemAttachmentOpener.CreateStartInfo(path, AttachmentPlatform.MacOS);
-        Assert.Equal("/usr/bin/qlmanage", start.FileName); Assert.False(start.UseShellExecute);
-        Assert.Equal(new[] { "-p", path }, start.ArgumentList);
+        Assert.Equal("/usr/bin/open", start.FileName); Assert.False(start.UseShellExecute);
+        Assert.Equal(new[] { "-a", "QuickTime Player", path }, start.ArgumentList);
         Assert.Empty(start.Arguments);
     }
     [Fact] public void LinuxUsesAbsolutePathAsOneArgument()
@@ -27,6 +27,12 @@ public sealed class AttachmentOpenerTests : IDisposable
         var start = SystemAttachmentOpener.CreateStartInfo(path, AttachmentPlatform.Linux);
         Assert.Equal("xdg-open", start.FileName); Assert.False(start.UseShellExecute);
         Assert.Equal(path, Assert.Single(start.ArgumentList)); Assert.True(Path.IsPathFullyQualified(start.ArgumentList[0]));
+    }
+    [Fact] public void MacDocumentsUseDefaultAppWithoutQuickLook()
+    {
+        var path = FilePath("notes.txt");
+        var start = SystemAttachmentOpener.CreateStartInfo(path, AttachmentPlatform.MacOS);
+        Assert.Equal("/usr/bin/open", start.FileName); Assert.Equal(path, Assert.Single(start.ArgumentList));
     }
     [Fact] public void WindowsOpensDocumentAssociationWithoutCommandInterpreter()
     {
@@ -51,7 +57,7 @@ public sealed class AttachmentOpenerTests : IDisposable
     [Theory]
     [InlineData("Windows", "приложением по умолчанию")]
     [InlineData("Linux", "xdg-utils")]
-    [InlineData("MacOS", "Quick Look")]
+    [InlineData("MacOS", "средствами macOS")]
     public async Task MissingDesktopToolHasInstructions(string platformName, string expected)
     {
         var platform = Enum.Parse<AttachmentPlatform>(platformName);
