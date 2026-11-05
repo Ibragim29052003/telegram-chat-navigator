@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:TelegramChatNavigator.Desktop.ViewModels" xmlns:core="using:TelegramChatNavigator.Core"
         x:Class="TelegramChatNavigator.Desktop.MainWindow" x:DataType="vm:MainViewModel"
-        Title="Telegram Chat Navigator · проект №20" Width="1380" Height="870" MinWidth="1060" MinHeight="680"
+        Title="Telegram Chat Navigator" Width="1380" Height="870" MinWidth="1060" MinHeight="680"
         Background="{DynamicResource PageBrush}" FontFamily="Arial">
   <Grid RowDefinitions="Auto,*,Auto,Auto">
     <Border Background="#172B4D" Padding="22,16">
@@ -11,8 +11,8 @@
           <TextBlock Text="{Binding Title}" Foreground="White" FontSize="24" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
           <TextBlock Text="{Binding Summary}" Foreground="#C5D6EB" FontSize="12" />
         </StackPanel>
-        <TextBlock Grid.Column="1" Text="УЧЕБНЫЙ ПРОЕКТ  /  20" Foreground="#96C8F0" VerticalAlignment="Center" FontSize="11" />
-        <WrapPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,14,0,0" Orientation="Horizontal">
+        <TextBlock Grid.Column="1" Text="ЛОКАЛЬНЫЙ АРХИВ" Foreground="#96C8F0" VerticalAlignment="Center" FontSize="11" />
+        <WrapPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,14,0,0" Orientation="Horizontal" Classes="header-actions">
           <Button Name="OpenButton" Content="Открыть экспорт" Command="{Binding OpenCommand}" IsEnabled="{Binding IsReady}" Classes="primary" Margin="0,0,6,0" />
           <Button Content="Демо" Command="{Binding DemoCommand}" IsEnabled="{Binding IsReady}" Margin="0,0,6,0" />
           <Button Content="Сохранить" Command="{Binding SaveCommand}" IsEnabled="{Binding IsReady}" Margin="0,0,6,0" />
@@ -40,7 +40,7 @@
             <TextBox Text="{Binding FromText}" PlaceholderText="С: yyyy-MM-dd" />
             <TextBox Text="{Binding ToText}" PlaceholderText="По: yyyy-MM-dd" />
             <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-              <Button Name="ApplyButton" Content="Найти" Command="{Binding ApplyCommand}" Classes="primary" HorizontalAlignment="Stretch" />
+              <Button Name="ApplyButton" Content="Найти" Command="{Binding ApplyCommand}" Background="#2779BC" Foreground="White" HorizontalAlignment="Stretch" />
               <Button Grid.Column="1" Content="Сброс" Command="{Binding ResetCommand}" HorizontalAlignment="Stretch" />
             </Grid>
             <Border Height="1" Background="{DynamicResource PageBrush}" Margin="0,7" />
@@ -65,10 +65,10 @@
             <DataTemplate x:DataType="core:ChatMessage">
               <Border Background="{DynamicResource BubbleBrush}" CornerRadius="10" Padding="14,10" Margin="0,3,8,3">
                 <StackPanel Spacing="6">
-                  <TextBlock Text="{Binding Sender}" FontWeight="SemiBold" Foreground="#3982B9" TextWrapping="Wrap" />
-                  <TextBlock Text="{Binding Text}" TextWrapping="Wrap" MaxHeight="150" ClipToBounds="True" />
-                  <TextBlock Text="{Binding AttachmentLabel}" Classes="caption" TextWrapping="Wrap" />
-                  <TextBlock Text="{Binding Poll.Question}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Sender}" FontWeight="SemiBold" Foreground="{DynamicResource SenderBrush}" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Text}" IsVisible="{Binding HasText}" TextWrapping="Wrap" MaxHeight="150" ClipToBounds="True" />
+                  <TextBlock Text="{Binding AttachmentLabel}" IsVisible="{Binding HasAttachments}" Classes="caption" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Poll.Question}" IsVisible="{Binding HasPoll}" FontWeight="SemiBold" TextWrapping="Wrap" />
                   <TextBlock Text="{Binding DateLabel}" Classes="caption" HorizontalAlignment="Right" />
                 </StackPanel>
               </Border>
@@ -92,7 +92,7 @@
               <Button Content="К ответу" Command="{Binding ReplyCommand}" IsEnabled="{Binding IsReady}" />
             </WrapPanel>
             <SelectableTextBlock Name="FullMessageText" Text="{Binding SelectedMessage.Text}" FontSize="{Binding MessageFontSize}" TextWrapping="Wrap" />
-            <SelectableTextBlock Text="{Binding SelectedMessage.PollText}" TextWrapping="Wrap" />
+            <SelectableTextBlock Text="{Binding SelectedMessage.PollText}" IsVisible="{Binding SelectedMessage.HasPoll}" TextWrapping="Wrap" />
             <TextBlock Text="Вложения" Classes="caption" />
             <ComboBox Name="AttachmentBox" ItemsSource="{Binding Attachments}" SelectedItem="{Binding SelectedAttachment}" HorizontalAlignment="Stretch">
               <ComboBox.ItemTemplate><DataTemplate x:DataType="core:Attachment"><TextBlock Text="{Binding Name}" TextWrapping="Wrap" /></DataTemplate></ComboBox.ItemTemplate>

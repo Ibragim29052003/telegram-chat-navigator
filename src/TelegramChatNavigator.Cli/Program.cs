@@ -38,6 +38,8 @@ internal static class Cli
             }
             if (options.ContainsKey("--from")) query = query with { From = ParseDate(Get("--from")) };
             if (options.ContainsKey("--to")) query = query with { To = ParseDate(Get("--to")) };
+            if (query.SenderId is not null && !session.Archive.Participants.Any(p => p.Id == query.SenderId))
+                throw new ArgumentException("Участник не найден. Получите ID командой participants.");
             var matches = ChatSearch.Find(session.Archive, query);
             session.SetQuery(query);
             if (command == "participants") foreach (var p in session.Archive.Participants) Console.WriteLine($"{p.Id}\t{p.Name}\t{p.MessageCount}");
@@ -83,6 +85,6 @@ internal static class Cli
     --out ПУТЬ         Для save-state (.tgnav.json) и export (.csv)
     --help              Справка
     JSON предпочтителен при наличии обоих форматов. CSV не является состоянием.
-    Пример: search examples/demo --text защита --kind Link
+    Пример: search examples/demo --text маршрут --kind Link
     """;
 }

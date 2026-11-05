@@ -32,6 +32,7 @@ public sealed partial class MainWindow : Window
         else if (command && e.Key == Key.O) action = vm.OpenCommand;
         else if (command && e.Key == Key.S) action = vm.SaveCommand;
         else if (command && e.Key == Key.L) action = vm.LoadCommand;
+        else if (command && e.Key == Key.Q) { Close(); e.Handled = true; }
         else if (command && e.Key == Key.F) { this.FindControl<TextBox>("SearchBox")!.Focus(); e.Handled = true; }
         else if (e.Key == Key.Enter && this.FindControl<TextBox>("SearchBox")!.IsFocused) action = vm.ApplyCommand;
         if (action is not null) { action.Execute(null); e.Handled = true; }

@@ -25,7 +25,7 @@ internal static partial class ImportSupport
     }
 
     public static string String(JsonElement element, string key, string fallback = "") =>
-        element.TryGetProperty(key, out var value) ? value.ValueKind == JsonValueKind.String ? value.GetString() ?? fallback : value.ToString() : fallback;
+        element.TryGetProperty(key, out var value) ? value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? fallback : value.ValueKind == JsonValueKind.String ? value.GetString() ?? fallback : value.ToString() : fallback;
     public static long Long(JsonElement element, string key, long fallback = 0) =>
         long.TryParse(String(element, key), out var value) ? value : fallback;
     public static string RichText(JsonElement element) => element.ValueKind switch
@@ -37,7 +37,7 @@ internal static partial class ImportSupport
     };
     public static DateTime Date(string text)
     {
-        // Telegram dates without offsets are wall-clock values from the export machine.
+        // Показываем время из экспорта без пересчёта в часовой пояс компьютера.
         if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date))
             return DateTime.SpecifyKind(date, DateTimeKind.Unspecified);
         throw new ChatFormatException($"Некорректная дата сообщения: {text}");

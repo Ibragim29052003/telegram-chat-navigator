@@ -9,7 +9,7 @@ public static class SafePaths
         root = Path.GetFullPath(root);
         var path = Path.GetFullPath(Path.Combine(root, relative.Replace('\\', '/')));
         EnsureInside(root, path);
-        // Check every component: a harmless-looking relative path may cross a symlink.
+        // Проверяем каждый каталог: символическая ссылка тоже может вывести за папку экспорта.
         var current = root;
         foreach (var part in Path.GetRelativePath(root, path).Split(Path.DirectorySeparatorChar))
         {

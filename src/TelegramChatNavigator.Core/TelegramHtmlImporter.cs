@@ -28,7 +28,7 @@ public sealed partial class TelegramHtmlImporter : IChatImporter
             cancellationToken.ThrowIfCancellationRequested();
             CheckSize(file);
             var html = await File.ReadAllTextAsync(file, cancellationToken);
-            // The parser has no browsing context: scripts, CSS and network requests never run.
+            // Разбираем HTML как данные. Скрипты, стили и сетевые запросы не выполняются.
             using var document = new HtmlParser().ParseDocument(html);
             if (name.Length == 0) name = document.QuerySelector(".page_header .text")?.TextContent.Trim() ?? "Чат HTML";
             var nodes = document.QuerySelectorAll(".message[id]");
@@ -43,7 +43,7 @@ public sealed partial class TelegramHtmlImporter : IChatImporter
                 }
                 if (!rawId.StartsWith("message", StringComparison.Ordinal) || !long.TryParse(rawId[7..], out var id) || id <= 0) continue;
                 var dateText = node.QuerySelector(".body > .date[title]")?.GetAttribute("title");
-                // Telegram also emits negative-id date separators; they are not actual messages.
+                // Разделители дней имеют отрицательный ID и не считаются сообщениями.
                 var validDate = TryDate(dateText, out var date);
                 if (!validDate && node.ClassList.Contains("service") && separatorDay != default) date = separatorDay.Date;
                 else if (!validDate) throw new ChatFormatException($"HTML: нет корректной даты у сообщения {id}.");
@@ -96,7 +96,7 @@ public sealed partial class TelegramHtmlImporter : IChatImporter
             }
             progress?.Report(new(messages.Count, Path.GetFileName(file)));
         }
-        // An empty Telegram export still contains the history container.
+        // В пустом экспорте Telegram всё равно присутствует контейнер history.
         if (messages.Count == 0 && !File.ReadAllText(files[0]).Contains("history", StringComparison.Ordinal))
             throw new ChatFormatException("HTML не похож на экспорт Telegram Desktop.");
         return Finish(name, "Telegram HTML", directory, messages);
@@ -107,7 +107,7 @@ public sealed partial class TelegramHtmlImporter : IChatImporter
     private static int FirstInteger(string? text) => int.TryParse(Regex.Match(text ?? "", @"\d+").Value, out var n) ? n : 0;
     private static bool TryDate(string? text, out DateTime date)
     {
-        // HTML dates may end in UTC+03:00. Keep the exported wall-clock date, as in JSON.
+        // Отбрасываем обозначение пояса, сохраняя местное время из экспорта, как в JSON.
         text = Regex.Replace(text ?? "", @"\s+(UTC|GMT).*$", "");
         return DateTime.TryParseExact(text, ["dd.MM.yyyy HH:mm:ss", "dd.MM.yyyy HH:mm"], CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
     }

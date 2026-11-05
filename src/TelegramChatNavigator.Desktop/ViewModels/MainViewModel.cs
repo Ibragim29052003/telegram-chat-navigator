@@ -45,12 +45,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SaveCommand = new AsyncCommand(() => Guard(async () =>
         {
             var path = await services.PickSaveAsync(false); if (path is null) return;
-            await ApplyCore(); await Task.Run(() => StateStore.SaveAsync(path, _session)); Status = "Состояние сохранено: " + path;
+            await ApplyCore(true); await Task.Run(() => StateStore.SaveAsync(path, _session)); Status = "Состояние сохранено: " + path;
         }));
         ExportCommand = new AsyncCommand(() => Guard(async () =>
         {
             var path = await services.PickSaveAsync(true); if (path is null) return;
-            await ApplyCore(); await Task.Run(() => StateStore.ExportCsvAsync(path, _matches)); Status = $"CSV: {_matches.Count} сообщений · {path}";
+            await ApplyCore(true); await Task.Run(() => StateStore.ExportCsvAsync(path, _matches)); Status = $"CSV: {_matches.Count} сообщений · {path}";
         }));
         ApplyCommand = new AsyncCommand(() => Guard(ApplyCore));
         ResetCommand = new AsyncCommand(() => Guard(async () => { ResetInputs(); await ApplyCore(); }));
@@ -96,7 +96,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<ChatMessage> Messages { get; } = [];
     public ObservableCollection<Participant> Participants { get; } = [];
     public ObservableCollection<string> Months { get; } = [];
-    public IReadOnlyList<KindOption> Kinds { get; } = [new(MessageKind.All, "Все сообщения"), new(MessageKind.Photo, "Фотографии"), new(MessageKind.Video, "Видео"), new(MessageKind.File, "Файлы"), new(MessageKind.Audio, "Аудио и голосовые"), new(MessageKind.Link, "Ссылки"), new(MessageKind.Poll, "Опросы"), new(MessageKind.Service, "Служебные события")];
+    public IReadOnlyList<KindOption> Kinds { get; } = [new(MessageKind.All, "Все сообщения"), new(MessageKind.Text, "Все обычные сообщения"), new(MessageKind.Photo, "Фотографии"), new(MessageKind.Video, "Видео"), new(MessageKind.File, "Файлы"), new(MessageKind.Audio, "Аудио и голосовые"), new(MessageKind.Link, "Ссылки"), new(MessageKind.Poll, "Опросы"), new(MessageKind.Service, "Служебные события")];
     public string[] Themes { get; } = ["System", "Light", "Dark"];
     public double[] FontSizes { get; } = [12, 15, 18, 21];
     public string SearchText { get => _searchText; set => Set(ref _searchText, value); }
@@ -133,7 +133,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public Attachment? SelectedAttachment
     {
         get => _selectedAttachment;
-        set { if (Set(ref _selectedAttachment, value)) _ = UpdatePreview(); }
+        set { Set(ref _selectedAttachment, value); _ = UpdatePreview(); }
     }
     public string? SelectedLink { get => _selectedLink; set => Set(ref _selectedLink, value); }
     public Bitmap? PreviewImage { get => _previewImage; private set { var old = _previewImage; Set(ref _previewImage, value); old?.Dispose(); } }
@@ -183,6 +183,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task ImportCore(string path)
     {
+        // Чтение большого архива выполняется в фоне, чтобы окно оставалось отзывчивым.
         Status = "Чтение экспорта…";
         var progress = new Progress<ImportProgress>(p => Status = $"{p.Stage}: {p.Messages} сообщений…");
         var archive = await Task.Run(() => new ChatImporter().ReadAsync(path, progress: progress));
@@ -194,6 +195,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var state = await Task.Run(() => StateStore.LoadAsync(path));
         var matches = await Task.Run(() => ChatSearch.Find(state.Archive, state.Query));
+        // Старую работу заменяем после успешного чтения, проверки и построения результата.
         CommitArchive(state.Archive, state.Query, state.SelectedMessageId, matches);
         Status = Directory.Exists(state.Archive.RootPath) ? "Состояние восстановлено." : "Тексты восстановлены. Папка медиа отсутствует: нажмите «Папка медиа».";
     }
@@ -215,16 +217,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private ChatQuery BuildQuery() => new(SearchText, SelectedKind.Value, string.IsNullOrEmpty(SelectedParticipant?.Id) ? null : SelectedParticipant.Id,
         string.IsNullOrWhiteSpace(FromText) ? null : ParseDate(FromText, "Начало периода"),
         string.IsNullOrWhiteSpace(ToText) ? null : ParseDate(ToText, "Конец периода"));
-    private async Task ApplyCore()
+    private Task ApplyCore() => ApplyCore(false);
+    private async Task ApplyCore(bool preserveSelection)
     {
+        var selectedId = preserveSelection ? SelectedMessage?.Id : null;
         var query = BuildQuery();
         var matches = await Task.Run(() => ChatSearch.Find(_session.Archive, query));
         _session.SetQuery(query); _matches = matches; _page = 0; ShowPage();
+        if (preserveSelection) SelectId(selectedId);
         Status = $"Найдено: {matches.Count}. Поиск включает текст, автора, названия файлов, ссылки и опросы.";
     }
     private void ResetInputs() { SearchText = ""; FromText = ""; ToText = ""; SelectedKind = Kinds[0]; SelectedParticipant = Participants.FirstOrDefault(); }
     private void ShowPage()
     {
+        // В ленту передаём только одну страницу, полный архив остаётся в Core.
         SelectedMessage = null;
         Messages.Clear(); foreach (var m in _matches.Skip(_page * PageSize).Take(PageSize)) Messages.Add(m);
         SelectedMessage = Messages.FirstOrDefault(); Raise(nameof(PageLabel));
@@ -257,6 +263,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (attachment.Kind != MessageKind.Photo) { PreviewNote += "\nНажмите «Предпросмотр macOS». Поддержка зависит от кодека Quick Look."; return; }
             if (new FileInfo(path).Length > 20 * 1024 * 1024) { PreviewNote += "\nИзображения свыше 20 МиБ: используйте предпросмотр macOS."; return; }
             var bitmap = await Task.Run(() => { using var stream = File.OpenRead(path); return Bitmap.DecodeToWidth(stream, 640); });
+            // Пока фото читалось, пользователь мог выбрать другое вложение.
             if (version == _previewVersion) PreviewImage = bitmap; else bitmap.Dispose();
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
@@ -272,7 +279,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void Dispose() { _session.Changed -= OnSessionChanged; ++_previewVersion; PreviewImage = null; }
 
     public const string HelpText = """
-    Telegram Chat Navigator · задание №20
+    Telegram Chat Navigator
 
     1. «Демо» открывает вымышленный чат. «Открыть экспорт» — папку одного чата Telegram Desktop с result.json или messages.html.
     2. Введите подстроку, выберите автора/категорию/период, нажмите «Найти» или Enter в поле поиска. Период: yyyy-MM-dd, обе границы включены.
@@ -291,7 +298,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     CLI: dotnet run --project src/TelegramChatNavigator.Cli -- --help
          ... -- inspect examples/demo
          ... -- participants examples/demo
-         ... -- search examples/demo --text защита --kind Link
+         ... -- search examples/demo --text маршрут --kind Link
          ... -- search examples/demo --from 2026-09-01 --to 2026-09-30
          ... -- save-state examples/demo --out /tmp/chat.tgnav.json
          ... -- export /tmp/chat.tgnav.json --out /tmp/messages.csv

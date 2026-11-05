@@ -7,12 +7,14 @@
           <SolidColorBrush x:Key="CardBrush">#FFFFFF</SolidColorBrush>
           <SolidColorBrush x:Key="BubbleBrush">#EAF2FC</SolidColorBrush>
           <SolidColorBrush x:Key="MutedBrush">#50627A</SolidColorBrush>
+          <SolidColorBrush x:Key="SenderBrush">#276AA1</SolidColorBrush>
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
           <SolidColorBrush x:Key="PageBrush">#17212E</SolidColorBrush>
           <SolidColorBrush x:Key="CardBrush">#202E40</SolidColorBrush>
           <SolidColorBrush x:Key="BubbleBrush">#253B52</SolidColorBrush>
           <SolidColorBrush x:Key="MutedBrush">#B4C5D8</SolidColorBrush>
+          <SolidColorBrush x:Key="SenderBrush">#79B9ED</SolidColorBrush>
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
     </ResourceDictionary>
@@ -24,5 +26,7 @@
     <Style Selector="TextBlock.caption"><Setter Property="Foreground" Value="{DynamicResource MutedBrush}" /><Setter Property="FontSize" Value="12" /></Style>
     <Style Selector="TextBlock.section"><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="FontSize" Value="16" /></Style>
     <Style Selector="Button.primary"><Setter Property="Background" Value="#2779BC" /><Setter Property="Foreground" Value="White" /></Style>
+    <Style Selector="WrapPanel.header-actions Button"><Setter Property="Background" Value="#E4ECF6" /><Setter Property="Foreground" Value="#172B4D" /></Style>
+    <Style Selector="WrapPanel.header-actions Button.primary"><Setter Property="Background" Value="#2779BC" /><Setter Property="Foreground" Value="White" /></Style>
   </Application.Styles>
 </Application>

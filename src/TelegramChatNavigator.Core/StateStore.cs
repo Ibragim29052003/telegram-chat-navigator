@@ -17,7 +17,9 @@ public static class StateStore
     public static Task SaveAsync(string path, NavigatorSession session, CancellationToken ct = default)
     {
         var relative = Path.GetRelativePath(Path.GetDirectoryName(Path.GetFullPath(path))!, session.Archive.RootPath);
-        return AtomicWriteAsync(path, new NavigatorState(1, relative, session.Archive, session.Query, session.SelectedMessageId), ct);
+        var state = new NavigatorState(1, relative, session.Archive, session.Query, session.SelectedMessageId);
+        Validate(state);
+        return AtomicWriteAsync(path, state, ct);
     }
 
     public static async Task<NavigatorState> LoadAsync(string path, CancellationToken ct = default)
@@ -28,7 +30,7 @@ public static class StateStore
             await using var stream = File.OpenRead(path);
             var state = await JsonSerializer.DeserializeAsync<NavigatorState>(stream, Options, ct)
                 ?? throw new ChatFormatException("Пустой файл состояния.");
-            Validate(state);
+            Validate(state); // Только проверенное состояние можно передать текущей сессии.
             var root = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, state.MediaRoot));
             return state with { Archive = state.Archive with { RootPath = root } };
         }
@@ -49,7 +51,7 @@ public static class StateStore
         foreach (var m in messages)
         {
             if (m is null || m.Id <= 0 || !ids.Add(m.Id) || m.Date < previous || m.Date == default || m.Text is null || m.Sender is null || m.SenderId is null ||
-                m.Attachments is null || m.Links is null || m.Attachments.Any(a => a is null || a.RelativePath is null || a.Name is null ||
+                m.Attachments is null || m.Links is null || m.Attachments.Any(a => a is null || string.IsNullOrWhiteSpace(a.RelativePath) || Path.IsPathRooted(a.RelativePath) || a.RelativePath.Replace('\\', '/').Split('/').Contains("..") || a.Name is null ||
                     a.Kind is not (MessageKind.Photo or MessageKind.Video or MessageKind.Audio or MessageKind.File)) ||
                 m.Links.Any(l => l is null || !SafePaths.IsWebLink(l)) ||
                 (m.Kind & ~(MessageKind.Text | MessageKind.Photo | MessageKind.Video | MessageKind.File | MessageKind.Audio | MessageKind.Link | MessageKind.Poll | MessageKind.Service)) != 0 ||
@@ -79,14 +81,19 @@ public static class StateStore
     public static async Task ExportCsvAsync(string path, IReadOnlyList<ChatMessage> messages)
     {
         static string Q(string? s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
-        // Formula-like text is prefixed with an apostrophe for safe opening in spreadsheets.
+        // Апостроф не даёт редактору таблиц принять текст сообщения за формулу.
         static string Cell(string s) => Q(s.Length > 0 && "=+-@\t\r\n".Contains(s[0]) ? "'" + s : s);
         var rows = messages.Select(m => string.Join(',', m.Id.ToString(), Q(m.Date.ToString("yyyy-MM-dd HH:mm:ss")), Cell(m.Sender), Cell(m.Text), Cell(m.PollText), Cell(m.AttachmentLabel), Cell(string.Join(" ", m.Links))));
         await AtomicTextAsync(path, "id,date,sender,text,poll,attachments,links\r\n" + string.Join("\r\n", rows));
     }
 
-    private static Task AtomicWriteAsync<T>(string path, T value, CancellationToken ct = default) =>
-        AtomicTextAsync(path, JsonSerializer.Serialize(value, Options), ct);
+    private static Task AtomicWriteAsync<T>(string path, T value, CancellationToken ct = default)
+    {
+        var text = JsonSerializer.Serialize(value, Options);
+        if (System.Text.Encoding.UTF8.GetByteCount(text) > ImportSupport.MaxFileBytes)
+            throw new ChatFormatException("Состояние больше 128 МиБ. Откройте экспорт меньшего периода.");
+        return AtomicTextAsync(path, text, ct);
+    }
 
     private static async Task AtomicTextAsync(string path, string text, CancellationToken ct = default)
     {
@@ -104,7 +111,8 @@ public static class StateStore
                 stream.Flush(true);
             }
             ct.ThrowIfCancellationRequested();
-            File.Move(temp, path, true); // Rename in the same directory is atomic on local macOS filesystems.
+            // Переименование в том же каталоге атомарно на локальной файловой системе macOS.
+            File.Move(temp, path, true);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }

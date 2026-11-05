@@ -11,6 +11,7 @@ public sealed class NavigatorSession
     public ChatArchive Archive { get; private set; } = new("Новый чат", "", []);
     public ChatQuery Query { get; private set; } = new();
     public long? SelectedMessageId { get; private set; }
+    // Окно подписывается на событие и обновляет строку состояния при изменении работы.
     public event EventHandler<SessionChangedEventArgs>? Changed;
 
     public void Replace(ChatArchive archive, ChatQuery? query = null, long? selectedMessageId = null)

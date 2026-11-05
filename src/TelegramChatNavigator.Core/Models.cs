@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace TelegramChatNavigator.Core;
 
+// Одно сообщение может содержать сразу текст, фотографию и ссылку.
 [Flags]
 public enum MessageKind { All = 0, Text = 1, Photo = 2, Video = 4, File = 8, Audio = 16, Link = 32, Poll = 64, Service = 128 }
 
@@ -15,6 +16,9 @@ public sealed record ChatMessage(long Id, DateTime Date, string SenderId, string
 {
     [JsonIgnore] public string DateLabel => Date.ToString("dd.MM.yyyy HH:mm");
     [JsonIgnore] public string KindLabel => Kind.ToString();
+    [JsonIgnore] public bool HasAttachments => Attachments.Count > 0;
+    [JsonIgnore] public bool HasPoll => Poll is not null;
+    [JsonIgnore] public bool HasText => Text.Length > 0;
     [JsonIgnore] public string PollText => Poll is null ? "" :
         $"Опрос: {Poll.Question}\n" + string.Join("\n", Poll.Answers.Select(a => $"• {a.Text} — {a.Voters}")) +
         $"\nУчастников: {Poll.TotalVoters}" + (Poll.Closed ? " · завершён" : " · открыт на момент экспорта");
@@ -31,7 +35,7 @@ public sealed record ChatArchive(string Name, string SourceFormat, IReadOnlyList
 {
     [JsonIgnore] public string RootPath { get; init; } = "";
     [JsonIgnore] public IReadOnlyList<Participant> Participants => Messages
-        .Where(m => m.Kind != MessageKind.Service)
+        .Where(m => !m.Kind.HasFlag(MessageKind.Service))
         .GroupBy(m => m.SenderId).Select(g => new Participant(g.Key, g.Last().Sender, g.Count()))
         .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToArray();
 }
@@ -71,7 +75,7 @@ public static class ChatSearch
         return result;
     }
 
-    // Lower bound finds the first message of the day (or the nearest following day).
+    // Нижняя граница: первое сообщение указанного дня или ближайшего следующего дня.
     public static int FindDate(IReadOnlyList<ChatMessage> sorted, DateOnly day)
     {
         int low = 0, high = sorted.Count;

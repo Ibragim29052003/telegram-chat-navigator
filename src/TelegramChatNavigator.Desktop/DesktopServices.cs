@@ -36,7 +36,7 @@ public sealed class DesktopServices(Window owner) : IDesktopServices
         if (!File.Exists(path)) throw new FileNotFoundException("Вложение отсутствует. Повторите экспорт с медиа или укажите новую папку медиа.");
         if (OperatingSystem.IsMacOS())
         {
-            // Quick Look previews media/documents without executing an attached application or script.
+            // Quick Look показывает файл; вложенные программы и скрипты не запускаются.
             var start = new ProcessStartInfo("/usr/bin/qlmanage") { UseShellExecute = false };
             start.ArgumentList.Add("-p"); start.ArgumentList.Add(path);
             Process.Start(start)?.Dispose();
