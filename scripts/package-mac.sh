@@ -6,13 +6,14 @@ if [[ "$(uname -s)" != Darwin ]]; then
   exit 1
 fi
 release_root="$PWD/artifacts"
-bundle="$release_root/TelegramChatNavigator.app"
 mkdir -p "$release_root"
-# Удаляем только результаты предыдущей упаковки, чтобы не оставить старые демофайлы.
-rm -rf "$release_root/publish" "$bundle"
-dotnet publish src/TelegramChatNavigator.Desktop -c Release -r osx-arm64 --self-contained true -o "$release_root/publish" -p:PublishTrimmed=false -p:NuGetLockFilePath=obj/packages.osx-arm64.lock.json
+# Временная папка вне iCloud не получает посторонние метаданные во время подписи.
+staging_root="$(mktemp -d "${TMPDIR:-/private/tmp}/telegram-navigator-package.XXXXXX")"
+trap 'rm -rf "$staging_root"' EXIT
+bundle="$staging_root/TelegramChatNavigator.app"
+dotnet publish src/TelegramChatNavigator.Desktop -c Release -r osx-arm64 --self-contained true -o "$staging_root/publish" -p:PublishTrimmed=false -p:NuGetLockFilePath=obj/packages.osx-arm64.lock.json
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
-cp -R "$release_root/publish/." "$bundle/Contents/MacOS/"
+cp -R "$staging_root/publish/." "$bundle/Contents/MacOS/"
 cat > "$bundle/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -26,12 +27,22 @@ cat > "$bundle/Contents/Info.plist" <<'PLIST'
 <key>CFBundleShortVersionString</key><string>1.0.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
-<key>LSMinimumSystemVersion</key><string>12.0</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
 </dict></plist>
 PLIST
 chmod +x "$bundle/Contents/MacOS/TelegramChatNavigator.Desktop"
+# Метаданные Finder не относятся к приложению и мешают строгой проверке подписи.
+for attribute in com.apple.FinderInfo com.apple.ResourceFork; do
+  /usr/bin/xattr -dr "$attribute" "$bundle" 2>/dev/null || true
+done
 codesign --force --deep --sign - "$bundle"
 codesign --verify --deep --strict "$bundle"
+# Сохраняем атрибуты подписи DLL; отбрасывать все xattr при архивации нельзя.
 ditto -c -k --sequesterRsrc --keepParent "$bundle" "$release_root/TelegramChatNavigator-osx-arm64.zip"
-echo "Готово: $bundle"
+ditto -x -k "$release_root/TelegramChatNavigator-osx-arm64.zip" "$staging_root/check"
+codesign --verify --deep --strict "$staging_root/check/TelegramChatNavigator.app"
+# Заменяем только результаты предыдущей упаковки, сохраняя исходники проекта.
+rm -rf "$release_root/publish" "$release_root/TelegramChatNavigator.app"
+ditto "$bundle" "$release_root/TelegramChatNavigator.app"
+echo "Готово: $release_root/TelegramChatNavigator.app"
 echo 'Сборка содержит .NET runtime. Подпись ad-hoc; notarization Apple не выполнялась.'
