@@ -31,19 +31,7 @@ public sealed class DesktopServices(Window owner) : IDesktopServices
         var dialog = new Window { Title = "Справка · Telegram Chat Navigator", Width = 720, Height = 620, MinWidth = 450, MinHeight = 350, Content = box, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         await dialog.ShowDialog(owner);
     }
-    public Task PreviewAsync(string path)
-    {
-        if (!File.Exists(path)) throw new FileNotFoundException("Вложение отсутствует. Повторите экспорт с медиа или укажите новую папку медиа.");
-        if (OperatingSystem.IsMacOS())
-        {
-            // Quick Look показывает файл; вложенные программы и скрипты не запускаются.
-            var start = new ProcessStartInfo("/usr/bin/qlmanage") { UseShellExecute = false };
-            start.ArgumentList.Add("-p"); start.ArgumentList.Add(path);
-            Process.Start(start)?.Dispose();
-        }
-        else throw new IOException("Системный предпросмотр реализован для macOS. Фото доступны внутри окна на всех платформах.");
-        return Task.CompletedTask;
-    }
+    public Task OpenAttachmentAsync(string path) => SystemAttachmentOpener.OpenAsync(path);
     public Task OpenLinkAsync(string url)
     {
         if (!SafePaths.IsWebLink(url)) throw new IOException("Разрешены только HTTP/HTTPS-ссылки.");

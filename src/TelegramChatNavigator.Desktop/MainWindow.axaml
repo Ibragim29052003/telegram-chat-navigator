@@ -99,7 +99,7 @@
             </ComboBox>
             <Image Source="{Binding PreviewImage}" MaxHeight="260" Stretch="Uniform" />
             <TextBlock Text="{Binding PreviewNote}" Classes="caption" TextWrapping="Wrap" />
-            <Button Content="Предпросмотр macOS" Command="{Binding PreviewCommand}" IsEnabled="{Binding IsReady}" HorizontalAlignment="Stretch" />
+            <Button Content="Открыть вложение" Command="{Binding OpenAttachmentCommand}" IsEnabled="{Binding IsReady}" HorizontalAlignment="Stretch" />
             <TextBlock Text="Ссылки · HTTP / HTTPS" Classes="caption" Margin="0,6,0,0" />
             <ComboBox ItemsSource="{Binding Links}" SelectedItem="{Binding SelectedLink}" HorizontalAlignment="Stretch">
               <ComboBox.ItemTemplate><DataTemplate x:DataType="x:String"><TextBlock Text="{Binding}" TextWrapping="Wrap" /></DataTemplate></ComboBox.ItemTemplate>

@@ -69,11 +69,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (!_session.Archive.Messages.Any(m => m.Id == id)) { Status = "Исходное сообщение не вошло в экспорт."; return; }
             ResetInputs(); await ApplyCore(); SelectId(id);
         }));
-        PreviewCommand = new AsyncCommand(() => Guard(async () =>
+        OpenAttachmentCommand = new AsyncCommand(() => Guard(async () =>
         {
             if (SelectedAttachment is null) { Status = "Сначала выберите вложение."; return; }
             var path = SafePaths.ResolveMedia(_session.Archive.RootPath, SelectedAttachment.RelativePath);
-            await services.PreviewAsync(path); Status = "Открыт системный предпросмотр. Закрыть: Esc или кнопка окна.";
+            await services.OpenAttachmentAsync(path); Status = "Вложение передано системному просмотрщику. При необходимости нажмите Play в его окне.";
         }));
         LinkCommand = new AsyncCommand(() => Guard(async () =>
         {
@@ -151,7 +151,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ICommand MonthCommand { get; }
     public ICommand ContextCommand { get; }
     public ICommand ReplyCommand { get; }
-    public ICommand PreviewCommand { get; }
+    public ICommand OpenAttachmentCommand { get; }
     public ICommand LinkCommand { get; }
     public ICommand RelocateCommand { get; }
     public ICommand HelpCommand { get; }
@@ -260,8 +260,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var path = SafePaths.ResolveMedia(_session.Archive.RootPath, attachment.RelativePath);
             if (!File.Exists(path)) { PreviewNote = "Файл не включён в экспорт или перемещён. Текст переписки доступен."; return; }
             PreviewNote = $"{attachment.Name} · {new FileInfo(path).Length / 1024.0:F1} КиБ";
-            if (attachment.Kind != MessageKind.Photo) { PreviewNote += "\nНажмите «Предпросмотр macOS». Поддержка зависит от кодека Quick Look."; return; }
-            if (new FileInfo(path).Length > 20 * 1024 * 1024) { PreviewNote += "\nИзображения свыше 20 МиБ: используйте предпросмотр macOS."; return; }
+            if (attachment.Kind != MessageKind.Photo) { PreviewNote += "\nНажмите «Открыть вложение». Нужен системный просмотрщик, поддерживающий этот формат."; return; }
+            if (new FileInfo(path).Length > 20 * 1024 * 1024) { PreviewNote += "\nИзображения свыше 20 МиБ: нажмите «Открыть вложение»."; return; }
             var bitmap = await Task.Run(() => { using var stream = File.OpenRead(path); return Bitmap.DecodeToWidth(stream, 640); });
             // Пока фото читалось, пользователь мог выбрать другое вложение.
             if (version == _previewVersion) PreviewImage = bitmap; else bitmap.Dispose();
@@ -285,7 +285,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     2. Введите подстроку, выберите автора/категорию/период, нажмите «Найти» или Enter в поле поиска. Период: yyyy-MM-dd, обе границы включены.
     3. Выберите сообщение. Справа — полный текст, опрос, список вложений и ссылок. «Контекст» снимает фильтры, сохраняя выбранное сообщение; «К ответу» находит исходное сообщение.
     4. «К дате»/«К месяцу» сбрасывает фильтры и выбирает первое сообщение не раньше даты. Лента показывает по 50 сообщений: «Назад»/«Далее».
-    5. Фото — внутри окна. «Предпросмотр macOS» открывает Quick Look для видео/аудио/документа; Esc закрывает предпросмотр. Некоторые кодеки могут не поддерживаться системой. Отсутствующее медиа повторно экспортируйте из Telegram.
+    5. Фото — внутри окна. «Открыть вложение»: macOS — Quick Look (Esc закрывает окно), Windows — приложение по умолчанию, Linux — xdg-open в графическом сеансе. Нужен просмотрщик с поддержкой формата; при ошибке назначьте его в системе. Отсутствующее медиа повторно экспортируйте из Telegram.
     6. «Сохранить» записывает тексты, фильтры, выбор и относительный путь к медиа в *.tgnav.json. «Загрузить» продолжает работу. Переносите рядом всю папку экспорта; при смене пути нажмите «Папка медиа». CSV сохраняет текущие найденные сообщения и не заменяет состояние.
     7. System/Light/Dark — системная/светлая/тёмная тема. Размер текста задаётся рядом. «Сохранить настройки» сохраняет их между запусками. При выходе чат автоматически не сохраняется: сначала нажмите «Сохранить».
 

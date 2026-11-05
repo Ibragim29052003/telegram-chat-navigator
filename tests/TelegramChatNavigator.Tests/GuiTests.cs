@@ -29,13 +29,14 @@ public sealed class FakeServices : IDesktopServices, IDisposable
     public string? StatePath { get; set; }
     public string? SavePath { get; set; }
     public int HelpCalls { get; private set; }
-    public string? PreviewedPath { get; private set; }
+    public string? OpenedAttachmentPath { get; private set; }
+    public Exception? AttachmentError { get; set; }
     public string? OpenedLink { get; private set; }
     public Task<string?> PickExportFolderAsync() => Task.FromResult(ExportFolder);
     public Task<string?> PickStateAsync() => Task.FromResult(StatePath);
     public Task<string?> PickSaveAsync(bool csv) => Task.FromResult(SavePath);
     public Task ShowHelpAsync(string text) { HelpCalls++; return Task.CompletedTask; }
-    public Task PreviewAsync(string path) { PreviewedPath = path; return Task.CompletedTask; }
+    public Task OpenAttachmentAsync(string path) { OpenedAttachmentPath = path; return AttachmentError is null ? Task.CompletedTask : Task.FromException(AttachmentError); }
     public Task OpenLinkAsync(string url) { OpenedLink = url; return Task.CompletedTask; }
     public void Dispose() => Directory.Delete(Root, true);
 }
@@ -125,7 +126,10 @@ public sealed class GuiTests
         var before = vm.Messages.Select(m => m.Id).ToArray(); vm.FromText = "не дата"; await vm.ApplyAsync();
         Assert.StartsWith("Ошибка:", vm.Status); Assert.Equal(before, vm.Messages.Select(m => m.Id));
         vm.FromText = ""; vm.SearchText = "видеотест"; await vm.ApplyAsync();
-        vm.PreviewCommand.Execute(null); await WaitReady(vm); Assert.EndsWith("demo.mp4", services.PreviewedPath);
+        vm.OpenAttachmentCommand.Execute(null); await WaitReady(vm); Assert.EndsWith("demo.mp4", services.OpenedAttachmentPath);
+        services.AttachmentError = new IOException("Назначьте приложение по умолчанию для видео.");
+        vm.OpenAttachmentCommand.Execute(null); await WaitReady(vm);
+        Assert.Contains("Назначьте приложение", vm.Status); Assert.Equal(8, vm.SelectedMessage!.Id); Assert.True(vm.IsReady);
         vm.SearchText = "рекомендации"; await vm.ApplyAsync(); vm.LinkCommand.Execute(null); await WaitReady(vm);
         Assert.Equal("https://www.mchs.gov.ru/", services.OpenedLink);
     }
