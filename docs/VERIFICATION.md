@@ -25,6 +25,9 @@
   оставили ID избранного, CSV независимо прочитан стандартным csv-модулем Python: №12/4.
 - Встраивание AVKit относится только к macOS. Headless-тесты не проверяют нативный плеер;
   Windows/Linux используют внешние приложения.
+- [CI коммита 43c7bf4](https://github.com/Ibragim29052003/telegram-chat-navigator/actions/runs/42231732813):
+  restore/build/test/audit успешны на Windows x64, Linux x64 и macOS arm64; на каждой ОС прошли
+  все **55 тестов**. В базе текущего источника NuGet известных уязвимостей не найдено.
 
 ## Сборка, зависимости и CI версии 1.0.1
 
