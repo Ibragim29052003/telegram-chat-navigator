@@ -42,16 +42,19 @@ public sealed partial class TelegramHtmlImporter : IChatImporter
                     continue;
                 }
                 if (!rawId.StartsWith("message", StringComparison.Ordinal) || !long.TryParse(rawId[7..], out var id) || id <= 0) continue;
-                var dateText = node.QuerySelector(".body > .date[title]")?.GetAttribute("title");
+                var body = node.Children.FirstOrDefault(e => e.ClassList.Contains("body"));
+                var dateText = body?.Children.FirstOrDefault(e => e.ClassList.Contains("date") && e.HasAttribute("title"))?.GetAttribute("title");
                 // Разделители дней имеют отрицательный ID и не считаются сообщениями.
                 var validDate = TryDate(dateText, out var date);
                 if (!validDate && node.ClassList.Contains("service") && separatorDay != default) date = separatorDay.Date;
                 else if (!validDate) throw new ChatFormatException($"HTML: нет корректной даты у сообщения {id}.");
-                var ownSender = node.QuerySelector(".body > .from_name")?.TextContent.Trim();
+                // Вложенный forwarded.body содержит автора пересылки, а не автора сообщения в чате.
+                var ownSender = body?.Children.FirstOrDefault(e => e.ClassList.Contains("from_name"))?.TextContent.Trim();
+                if (ownSender is not null) ownSender = ViaBotSuffix().Replace(ownSender, "");
                 if (!string.IsNullOrWhiteSpace(ownSender)) sender = ownSender;
                 var service = node.ClassList.Contains("service");
-                var body = node.QuerySelector(".body");
-                var textNode = body?.Children.FirstOrDefault(x => x.ClassList.Contains("text"));
+                var contentBody = body?.Children.FirstOrDefault(e => e.ClassList.Contains("forwarded") && e.ClassList.Contains("body")) ?? body;
+                var textNode = contentBody?.Children.FirstOrDefault(x => x.ClassList.Contains("text"));
                 var text = textNode is null ? service ? body?.TextContent.Trim() ?? "Служебное событие" : "" : PlainText(textNode).Trim();
                 var attachments = new List<Attachment>();
                 var links = ExtractLinks(text).ToList();
@@ -59,6 +62,8 @@ public sealed partial class TelegramHtmlImporter : IChatImporter
                 {
                     var href = anchor.GetAttribute("href") ?? "";
                     if (SafePaths.IsWebLink(href)) { links.Add(href); continue; }
+                    // Telegram может записать emoji варианта опроса как ссылку с числовым ID.
+                    if (anchor.Closest(".media_poll") is not null) continue;
                     if (href.StartsWith('#') || href.Contains("://", StringComparison.Ordinal) || href.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)) continue;
                     if (anchor.Closest(".media_wrap") is null && !anchor.ClassList.Contains("photo_wrap")) continue;
                     var relative = Uri.UnescapeDataString(href);
@@ -103,6 +108,7 @@ public sealed partial class TelegramHtmlImporter : IChatImporter
     }
 
     [GeneratedRegex(@"^messages(\d*)\.html$", RegexOptions.IgnoreCase)] private static partial Regex PageName();
+    [GeneratedRegex(@"\s{2,}via @[A-Za-z0-9_]+$")] private static partial Regex ViaBotSuffix();
     private static int PageNumber(string file) => int.TryParse(PageName().Match(Path.GetFileName(file)).Groups[1].Value, out var n) ? n : 1;
     private static int FirstInteger(string? text) => int.TryParse(Regex.Match(text ?? "", @"\d+").Value, out var n) ? n : 0;
     private static bool TryDate(string? text, out DateTime date)

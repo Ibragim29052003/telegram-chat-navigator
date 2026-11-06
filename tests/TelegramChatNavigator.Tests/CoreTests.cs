@@ -38,6 +38,29 @@ public sealed class CoreTests : IDisposable
         Assert.Empty(ChatSearch.Find(a, new("несуществующаястрока")));
         Assert.Throws<ArgumentException>(() => ChatSearch.Find(a, new(From: new(2027, 1, 1), To: new(2026, 1, 1))));
     }
+
+    [Fact] public async Task JsonMentionEntitiesBecomeTelegramLinksWithoutDuplicating()
+    {
+        var path = await Input("""
+        {"messages":[{"id":1,"date":"2026-09-01T10:00:00","text":[{"type":"mention","text":"@ExampleBot"}],
+          "text_entities":[{"type":"mention","text":"@ExampleBot"},{"type":"mention","text":"@bad/name"}]}]}
+        """);
+        var archive = await new ChatImporter().ReadAsync(path);
+        var message = Assert.Single(ChatSearch.Find(archive, new(Kind: MessageKind.Link)));
+        Assert.Equal("https://t.me/ExampleBot", Assert.Single(message.Links));
+    }
+
+    [Fact] public async Task JsonBareLinkEntitiesAndUrlButtonsPreserveWebAddresses()
+    {
+        var path = await Input("""
+        {"messages":[{"id":1,"date":"2026-09-01T10:00:00","text":"example.org/path",
+          "text_entities":[{"type":"link","text":"example.org/path"},{"type":"link","text":"ftp://example.org/"}],
+          "inline_bot_buttons":[[{"type":"url","text":"Книга","data":"https://example.org/book"},
+            {"type":"callback","data":"https://example.org/callback"},{"type":"url","data":"javascript:alert(1)"}]]}]}
+        """);
+        var message = Assert.Single((await new ChatImporter().ReadAsync(path)).Messages);
+        Assert.Equal(new[] { "https://example.org/path", "https://example.org/book" }, message.Links);
+    }
     [Fact] public async Task DateLowerBoundAgreesWithIndependentLinearScan()
     {
         var a = await Archive();
@@ -58,6 +81,48 @@ public sealed class CoreTests : IDisposable
         Assert.Equal("https://telegram.org/", Assert.Single(a.Messages[1].Links));
         Assert.Equal("Да", a.Messages[2].Poll!.Answers[0].Text);
         Assert.Equal(2, a.Messages[2].Poll!.Answers[0].Voters); Assert.True(a.Messages[2].Poll!.Closed);
+    }
+
+    [Fact] public async Task HtmlForwardedBodyKeepsChatAuthorAndReadsForwardedText()
+    {
+        var path = await Input("""
+        <div class="history">
+          <div class="message default" id="message1"><div class="body">
+            <div class="date" title="01.09.2026 10:00:00"></div><div class="from_name">Канал  via @ExampleBot</div>
+            <div class="text">Первая запись</div>
+          </div></div>
+          <div class="message default joined" id="message2"><div class="body">
+            <div class="date" title="01.09.2026 10:01:00"></div>
+            <div class="forwarded body"><div class="from_name">Другой автор <span>31.08.2026</span></div>
+              <div class="text">Пересланный текст<br>Вторая строка <a href="https://example.com/">источник</a></div>
+            </div>
+          </div></div>
+          <div class="message default joined" id="message3"><div class="body">
+            <div class="date" title="01.09.2026 10:02:00"></div><div class="text">После пересылки</div>
+          </div></div>
+        </div>
+        """, "messages.html");
+        var archive = await new ChatImporter().ReadAsync(path);
+        Assert.Equal("Канал", Assert.Single(archive.Participants).Name);
+        Assert.All(archive.Messages, m => Assert.Equal("Канал", m.Sender));
+        Assert.Equal("Пересланный текст\nВторая строка источник", archive.Messages[1].Text);
+        Assert.Equal("https://example.com/", Assert.Single(archive.Messages[1].Links));
+    }
+
+    [Fact] public async Task HtmlPollEmojiLinkIsNotAnAttachment()
+    {
+        var path = await Input("""
+        <div class="history"><div class="message default" id="message1"><div class="body">
+          <div class="date" title="01.09.2026 10:00:00"></div><div class="from_name">Автор</div>
+          <div class="media_wrap"><div class="media_poll"><div class="question">Вопрос</div>
+            <div class="answer">- Другое <a href="5395444784611480792">✏️</a><span class="details">2 votes</span></div>
+            <div class="total">2 votes</div>
+          </div></div>
+        </div></div></div>
+        """, "messages.html");
+        var message = Assert.Single((await new ChatImporter().ReadAsync(path)).Messages);
+        Assert.Empty(message.Attachments); Assert.False(message.Kind.HasFlag(MessageKind.File));
+        Assert.Equal("Другое ✏️", message.Poll!.Answers[0].Text); Assert.Equal(2, message.Poll.Answers[0].Voters);
     }
     [Theory]
     [InlineData("{")]

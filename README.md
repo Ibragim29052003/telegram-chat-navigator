@@ -39,7 +39,7 @@ Avalonia не требует MAUI workload, Windows или виртуально�
 ./scripts/package-mac.sh
 ```
 
-Версия Mac-сборки: **1.1.0**. Результат: `artifacts/TelegramChatNavigator.app` и `artifacts/TelegramChatNavigator-osx-arm64.zip`.
+Версия Mac-сборки: **1.1.1**. Результат: `artifacts/TelegramChatNavigator.app` и `artifacts/TelegramChatNavigator-osx-arm64.zip`.
 В ZIP есть .NET runtime: отдельно устанавливать .NET для этой сборки не требуется.
 Архитектура — Apple Silicon, целевая macOS 14 и новее; фактически проверена macOS 27.0.
 Используется локальная ad-hoc подпись; notarization Apple не выполнялась.
@@ -94,6 +94,7 @@ dotnet run --project src/TelegramChatNavigator.Cli -- export /tmp/chat.tgnav.jso
 | [Форматы и ограничения](docs/FORMATS.md) | JSON/HTML, состояние, CSV, пути, перенос и кодеки |
 | [Защита на 7–10 минут](docs/DEFENSE.md) | Вступление от первого лица, показ, вопросы и план освоения |
 | [Проверки](docs/VERIFICATION.md) | Фактические результаты и оставшиеся ручные проверки |
+| [Примеры преподавателя](docs/TEACHER_EXAMPLES.md) | Результаты всех пяти архивов, JSON/HTML и реальных медиа |
 | [Происхождение демо](examples/README.md) | Ожидаемые результаты, авторство ассетов |
 
 ## Проверка и структура

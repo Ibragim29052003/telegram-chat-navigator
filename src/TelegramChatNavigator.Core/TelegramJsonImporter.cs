@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using static TelegramChatNavigator.Core.ImportSupport;
 
 namespace TelegramChatNavigator.Core;
@@ -30,6 +31,7 @@ public sealed class TelegramJsonImporter : IChatImporter
                 var links = ExtractLinks(text).ToList();
                 if (item.TryGetProperty("text_entities", out var entities)) AddEntityLinks(entities, links);
                 if (item.TryGetProperty("text", out var rich)) AddEntityLinks(rich, links);
+                if (item.TryGetProperty("inline_bot_buttons", out var buttons)) AddButtonLinks(buttons, links);
                 var attachments = new List<Attachment>();
                 var photo = String(item, "photo");
                 if (photo.Length > 0) attachments.Add(new(photo, MessageKind.Photo, Path.GetFileName(photo)));
@@ -70,6 +72,31 @@ public sealed class TelegramJsonImporter : IChatImporter
             if (entity.ValueKind != JsonValueKind.Object) continue;
             var href = String(entity, "href");
             if (SafePaths.IsWebLink(href)) links.Add(href);
+            // В HTML Telegram уже превращает @username в t.me-ссылку; делаем то же для JSON.
+            var text = String(entity, "text");
+            if (String(entity, "type") == "mention" && Regex.IsMatch(text, @"^@[A-Za-z0-9_]+$"))
+                links.Add("https://t.me/" + text[1..]);
+            if (String(entity, "type") == "link")
+            {
+                // Схему дополняем только у ссылки, явно отмеченной самим Telegram.
+                var url = SafePaths.IsWebLink(text) ? text : !text.Contains("://", StringComparison.Ordinal) ? "https://" + text : "";
+                if (SafePaths.IsWebLink(url)) links.Add(url);
+            }
+        }
+    }
+
+    private static void AddButtonLinks(JsonElement buttons, List<string> links)
+    {
+        if (buttons.ValueKind != JsonValueKind.Array) return;
+        foreach (var row in buttons.EnumerateArray())
+        {
+            if (row.ValueKind != JsonValueKind.Array) continue;
+            foreach (var button in row.EnumerateArray())
+            {
+                if (button.ValueKind != JsonValueKind.Object || String(button, "type") != "url") continue;
+                var url = String(button, "data");
+                if (SafePaths.IsWebLink(url)) links.Add(url);
+            }
         }
     }
 }
