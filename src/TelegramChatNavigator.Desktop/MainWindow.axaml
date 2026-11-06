@@ -39,6 +39,9 @@
             <TextBlock Text="Период включительно" Classes="caption" Margin="0,5,0,0" />
             <TextBox Text="{Binding FromText}" PlaceholderText="С: yyyy-MM-dd" />
             <TextBox Text="{Binding ToText}" PlaceholderText="По: yyyy-MM-dd" />
+            <CheckBox Name="FavoritesOnlyBox" Content="Только избранное" IsChecked="{Binding FavoritesOnly}" />
+            <TextBlock Text="{Binding FavoriteSummary}" Classes="caption" />
+            <ComboBox Name="OrderBox" ItemsSource="{Binding Orders}" SelectedItem="{Binding SelectedOrder}" HorizontalAlignment="Stretch" />
             <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
               <Button Name="ApplyButton" Content="Найти" Command="{Binding ApplyCommand}" Background="#2779BC" Foreground="White" HorizontalAlignment="Stretch" />
               <Button Grid.Column="1" Content="Сброс" Command="{Binding ResetCommand}" HorizontalAlignment="Stretch" />
@@ -91,6 +94,7 @@
               <Button Content="Контекст" Command="{Binding ContextCommand}" IsEnabled="{Binding IsReady}" Margin="0,0,6,0" />
               <Button Content="К ответу" Command="{Binding ReplyCommand}" IsEnabled="{Binding IsReady}" />
             </WrapPanel>
+            <Button Name="FavoriteButton" Content="{Binding FavoriteButtonLabel}" Command="{Binding FavoriteCommand}" IsEnabled="{Binding HasSelectedMessage}" HorizontalAlignment="Stretch" />
             <SelectableTextBlock Name="FullMessageText" Text="{Binding SelectedMessage.Text}" FontSize="{Binding MessageFontSize}" TextWrapping="Wrap" />
             <SelectableTextBlock Text="{Binding SelectedMessage.PollText}" IsVisible="{Binding SelectedMessage.HasPoll}" TextWrapping="Wrap" />
             <TextBlock Text="Вложения" Classes="caption" />

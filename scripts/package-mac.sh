@@ -23,8 +23,8 @@ cat > "$bundle/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>TelegramChatNavigator</string>
 <key>CFBundleDisplayName</key><string>Telegram Chat Navigator</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleVersion</key><string>1.0.1</string>
-<key>CFBundleShortVersionString</key><string>1.0.1</string>
+<key>CFBundleVersion</key><string>1.1.0</string>
+<key>CFBundleShortVersionString</key><string>1.1.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>

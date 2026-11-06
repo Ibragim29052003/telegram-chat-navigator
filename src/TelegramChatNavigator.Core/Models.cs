@@ -40,8 +40,11 @@ public sealed record ChatArchive(string Name, string SourceFormat, IReadOnlyList
         .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToArray();
 }
 
+public enum MessageOrder { OldestFirst, NewestFirst }
+
 public sealed record ChatQuery(string Text = "", MessageKind Kind = MessageKind.All,
-    string? SenderId = null, DateOnly? From = null, DateOnly? To = null);
+    string? SenderId = null, DateOnly? From = null, DateOnly? To = null,
+    bool FavoritesOnly = false, MessageOrder Order = MessageOrder.OldestFirst);
 
 public sealed record ImportProgress(int Messages, string Stage);
 
@@ -57,13 +60,14 @@ public sealed class ChatFormatException(string message, Exception? inner = null)
 public static class ChatSearch
 {
     public static IReadOnlyList<ChatMessage> Find(ChatArchive archive, ChatQuery query,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, IReadOnlySet<long>? favoriteMessageIds = null)
     {
         if (query.From > query.To) throw new ArgumentException("Начало периода позже его конца.");
         var result = new List<ChatMessage>();
         foreach (var message in archive.Messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (query.FavoritesOnly && favoriteMessageIds?.Contains(message.Id) != true) continue;
             var date = DateOnly.FromDateTime(message.Date);
             if (query.Kind != MessageKind.All && !message.Kind.HasFlag(query.Kind)) continue;
             if (query.SenderId is not null && message.SenderId != query.SenderId) continue;
@@ -72,6 +76,8 @@ public static class ChatSearch
                 !message.SearchText.Contains(query.Text.Trim(), StringComparison.OrdinalIgnoreCase)) continue;
             result.Add(message);
         }
+        // Импорт уже упорядочил архив по времени: повторная сортировка не нужна.
+        if (query.Order == MessageOrder.NewestFirst) result.Reverse();
         return result;
     }
 

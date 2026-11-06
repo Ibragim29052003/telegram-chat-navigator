@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TelegramChatNavigator.Desktop.ViewModels" x:DataType="vm:PhotoViewerViewModel"
+        x:Class="TelegramChatNavigator.Desktop.PhotoViewerWindow" Title="Фотографии чата"
+        Width="1000" Height="740" MinWidth="620" MinHeight="420" Background="{DynamicResource PageBrush}"
+        WindowStartupLocation="CenterOwner">
+  <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="16" RowSpacing="10">
+    <StackPanel Spacing="4">
+      <TextBlock Name="PhotoHeading" Text="{Binding Heading}" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+      <TextBlock Text="{Binding Caption}" Classes="caption" />
+    </StackPanel>
+    <Border Grid.Row="1" Background="#101820" CornerRadius="8" ClipToBounds="True">
+      <Grid>
+        <Image Name="FitPhoto" Source="{Binding Image}" Stretch="Uniform" IsVisible="{Binding Fit}" Margin="8" />
+        <ScrollViewer IsVisible="{Binding !Fit}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+          <Image Source="{Binding Image}" Width="{Binding ImageWidth}" Height="{Binding ImageHeight}" Stretch="Fill" Margin="8" />
+        </ScrollViewer>
+        <ProgressBar IsVisible="{Binding IsLoading}" IsIndeterminate="True" Height="3" VerticalAlignment="Top" />
+      </Grid>
+    </Border>
+    <WrapPanel Grid.Row="2">
+      <Button Name="PreviousPhotoButton" Content="← Предыдущая" Command="{Binding PreviousCommand}" IsEnabled="{Binding CanPrevious}" Margin="0,0,6,4" />
+      <Button Name="NextPhotoButton" Content="Следующая →" Command="{Binding NextCommand}" IsEnabled="{Binding CanNext}" Margin="0,0,12,4" />
+      <Button Content="−" Command="{Binding ZoomOutCommand}" Margin="0,0,6,4" />
+      <Button Content="+" Command="{Binding ZoomInCommand}" Margin="0,0,6,4" />
+      <Button Content="Вписать" Command="{Binding FitCommand}" Margin="0,0,12,4" />
+      <TextBlock Text="{Binding ZoomLabel}" Classes="caption" VerticalAlignment="Center" />
+    </WrapPanel>
+    <TextBlock Grid.Row="3" Name="PhotoNote" Text="{Binding Note}" Classes="caption" TextWrapping="Wrap" />
+  </Grid>
+</Window>

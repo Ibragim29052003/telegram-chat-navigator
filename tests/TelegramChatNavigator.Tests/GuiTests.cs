@@ -32,11 +32,13 @@ public sealed class FakeServices : IDesktopServices, IDisposable
     public string? OpenedAttachmentPath { get; private set; }
     public Exception? AttachmentError { get; set; }
     public string? OpenedLink { get; private set; }
+    public long? ViewedPhotoMessageId { get; private set; }
     public Task<string?> PickExportFolderAsync() => Task.FromResult(ExportFolder);
     public Task<string?> PickStateAsync() => Task.FromResult(StatePath);
     public Task<string?> PickSaveAsync(bool csv) => Task.FromResult(SavePath);
     public Task ShowHelpAsync(string text) { HelpCalls++; return Task.CompletedTask; }
-    public Task OpenAttachmentAsync(string path) { OpenedAttachmentPath = path; return AttachmentError is null ? Task.CompletedTask : Task.FromException(AttachmentError); }
+    public Task OpenAttachmentAsync(string path, MessageKind kind = MessageKind.File) { OpenedAttachmentPath = path; return AttachmentError is null ? Task.CompletedTask : Task.FromException(AttachmentError); }
+    public Task ShowPhotoAsync(ChatArchive archive, long messageId, Attachment attachment) { ViewedPhotoMessageId = messageId; return Task.CompletedTask; }
     public Task OpenLinkAsync(string url) { OpenedLink = url; return Task.CompletedTask; }
     public void Dispose() => Directory.Delete(Root, true);
 }
@@ -149,5 +151,60 @@ public sealed class GuiTests
         services.SavePath = Path.Combine(services.Root, "page.tgnav.json"); vm.SaveCommand.Execute(null); await WaitReady(vm);
         await vm.OpenStatePathAsync(services.SavePath); Assert.Single(vm.Messages); Assert.Equal(101, vm.SelectedMessage!.Id);
         vm.PreviousPageCommand.Execute(null); Assert.Equal(51, vm.SelectedMessage!.Id);
+    }
+
+    [AvaloniaFact] public async Task FavoritesBindingsPersistFilterAndRemoveLastResult()
+    {
+        using var services = new FakeServices(); using var vm = new MainViewModel(services);
+        var window = new MainWindow(false) { DataContext = vm }; window.Show();
+        try
+        {
+            await vm.OpenPathAsync(Demo);
+            vm.SelectedMessage = vm.Messages.Single(m => m.Id == 4);
+            var star = window.FindControl<Button>("FavoriteButton")!;
+            star.Command!.Execute(null); await WaitReady(vm);
+            Assert.Equal("★ Убрать из избранного", star.Content); Assert.Equal(4, vm.SelectedMessage!.Id);
+            vm.SelectedMessage = vm.Messages.Single(m => m.Id == 12); star.Command.Execute(null); await WaitReady(vm);
+            window.FindControl<CheckBox>("FavoritesOnlyBox")!.IsChecked = true;
+            window.FindControl<ComboBox>("OrderBox")!.SelectedIndex = 1;
+            await vm.ApplyAsync(); Assert.Equal(new long[] { 12, 4 }, vm.Messages.Select(m => m.Id));
+            services.SavePath = Path.Combine(services.Root, "favorites.tgnav.json"); vm.SaveCommand.Execute(null); await WaitReady(vm);
+            await vm.OpenPathAsync(Demo); Assert.Equal("В избранном: 0", vm.FavoriteSummary);
+            await vm.OpenStatePathAsync(services.SavePath); Assert.True(vm.FavoritesOnly);
+            Assert.Equal(new long[] { 12, 4 }, vm.Messages.Select(m => m.Id)); Assert.Equal(12, vm.SelectedMessage!.Id);
+            star.Command.Execute(null); await WaitReady(vm); Assert.Equal(4, Assert.Single(vm.Messages).Id);
+            star.Command.Execute(null); await WaitReady(vm); Assert.Empty(vm.Messages); Assert.False(star.IsEnabled);
+            Assert.Equal("В избранном: 0", vm.FavoriteSummary);
+            vm.JumpText = "2026-10-01"; vm.JumpCommand.Execute(null); await WaitReady(vm);
+            Assert.False(vm.FavoritesOnly); Assert.Equal(MessageOrder.OldestFirst, vm.SelectedOrder.Value); Assert.Equal(11, vm.SelectedMessage!.Id);
+            vm.SelectedMessage = vm.Messages.Single(m => m.Id == 3);
+            vm.OpenAttachmentCommand.Execute(null); await WaitReady(vm); Assert.Equal(3, services.ViewedPhotoMessageId);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact] public async Task PhotoWindowLoadsZoomsAndHandlesMissingNextPhoto()
+    {
+        var archive = await new ChatImporter().ReadAsync(Demo);
+        var photo = archive.Messages.Single(m => m.Id == 3).Attachments[0];
+        var window = new PhotoViewerWindow(archive, 3, photo); window.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var vm = (PhotoViewerViewModel)window.DataContext!;
+            for (int i = 0; i < 500 && vm.IsLoading; i++) { await Task.Delay(10); Dispatcher.UIThread.RunJobs(); }
+            Assert.True(vm.Image is not null, vm.Note); Assert.StartsWith("1 / 2", vm.Heading); Assert.False(vm.CanPrevious);
+            window.KeyPress(Key.OemPlus, RawInputModifiers.None, PhysicalKey.Equal, "+");
+            Assert.False(vm.Fit); Assert.True(vm.ImageWidth > 1920);
+            window.KeyPress(Key.D0, RawInputModifiers.None, PhysicalKey.Digit0, "0"); Assert.True(vm.Fit);
+            window.FindControl<Button>("NextPhotoButton")!.Command!.Execute(null);
+            for (int i = 0; i < 500 && vm.IsLoading; i++) { await Task.Delay(10); Dispatcher.UIThread.RunJobs(); }
+            Assert.Null(vm.Image); Assert.Contains("не включён", vm.Note); Assert.False(vm.CanNext);
+            window.KeyPress(Key.Left, RawInputModifiers.None, PhysicalKey.ArrowLeft, null);
+            for (int i = 0; i < 500 && vm.IsLoading; i++) { await Task.Delay(10); Dispatcher.UIThread.RunJobs(); }
+            Assert.NotNull(vm.Image);
+            window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null); Assert.False(window.IsVisible); Assert.Null(vm.Image);
+        }
+        finally { window.Close(); }
     }
 }

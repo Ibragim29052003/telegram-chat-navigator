@@ -181,4 +181,48 @@ public sealed class CoreTests : IDisposable
         session.Replace(await Archive()); session.SetQuery(new("маршрут")); session.Select(4);
         Assert.Equal(new[] { "Загружен чат", "Изменён фильтр", "Выбрано сообщение" }, reasons);
     }
+
+    [Fact] public async Task FavoritesCombineWithAuthorPeriodCategoryAndOrder()
+    {
+        var archive = await Archive();
+        var favorites = new HashSet<long> { 3, 4, 5, 12 };
+        var query = new ChatQuery("маршрут", MessageKind.Link, From: new(2026, 9, 1), To: new(2026, 10, 31),
+            FavoritesOnly: true, Order: MessageOrder.NewestFirst);
+        Assert.Equal(new long[] { 12, 4 }, ChatSearch.Find(archive, query, favoriteMessageIds: favorites).Select(m => m.Id));
+        Assert.Equal(new long[] { 12 }, ChatSearch.Find(archive, query with { SenderId = "user200" }, favoriteMessageIds: favorites).Select(m => m.Id));
+        Assert.Empty(ChatSearch.Find(archive, query));
+        Assert.Equal(14, ChatSearch.Find(archive, new(Order: MessageOrder.NewestFirst))[0].Id);
+    }
+
+    [Fact] public async Task FavoritesRoundTripAndOldStateRemainsReadable()
+    {
+        var session = new NavigatorSession(); session.Replace(await Archive());
+        session.ToggleFavorite(4); session.ToggleFavorite(12); session.ToggleFavorite(3); session.ToggleFavorite(3);
+        Assert.Throws<ArgumentException>(() => session.ToggleFavorite(999));
+        session.SetQuery(new(FavoritesOnly: true, Order: MessageOrder.NewestFirst)); session.Select(12);
+        var path = Path.Combine(_temp, "favorites.tgnav.json"); await StateStore.SaveAsync(path, session);
+        var state = await StateStore.LoadAsync(path);
+        Assert.Equal(new long[] { 4, 12 }, state.FavoriteMessageIds); Assert.Equal(session.Query, state.Query);
+        var restored = new NavigatorSession(); restored.Replace(state.Archive, state.Query, state.SelectedMessageId, state.FavoriteMessageIds);
+        Assert.True(restored.FavoriteMessageIds.SetEquals(new long[] { 4, 12 }));
+        var node = JsonNode.Parse(await File.ReadAllTextAsync(path))!;
+        node.AsObject().Remove("FavoriteMessageIds");
+        node["Query"]!.AsObject().Remove("FavoritesOnly"); node["Query"]!.AsObject().Remove("Order");
+        await File.WriteAllTextAsync(path, node.ToJsonString());
+        var old = await StateStore.LoadAsync(path);
+        Assert.Null(old.FavoriteMessageIds); Assert.False(old.Query.FavoritesOnly); Assert.Equal(MessageOrder.OldestFirst, old.Query.Order);
+        restored.Replace(old.Archive); Assert.Empty(restored.FavoriteMessageIds);
+    }
+
+    [Theory]
+    [InlineData("[999]")]
+    [InlineData("[4,4]")]
+    public async Task InvalidFavoritesAreRejectedBeforeRestoring(string ids)
+    {
+        var session = new NavigatorSession(); session.Replace(await Archive());
+        var path = Path.Combine(_temp, "bad-favorites.tgnav.json"); await StateStore.SaveAsync(path, session);
+        var node = JsonNode.Parse(await File.ReadAllTextAsync(path))!; node["FavoriteMessageIds"] = JsonNode.Parse(ids);
+        await File.WriteAllTextAsync(path, node.ToJsonString());
+        await Assert.ThrowsAsync<ChatFormatException>(() => StateStore.LoadAsync(path));
+    }
 }

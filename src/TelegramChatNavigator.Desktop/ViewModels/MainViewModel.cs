@@ -12,6 +12,10 @@ public sealed record KindOption(MessageKind Value, string Name)
 {
     public override string ToString() => Name;
 }
+public sealed record OrderOption(MessageOrder Value, string Name)
+{
+    public override string ToString() => Name;
+}
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
@@ -24,13 +28,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _searchText = "", _fromText = "", _toText = "", _jumpText = "2026-09-01";
     private string _title = "Telegram Chat Navigator", _summary = "Откройте экспорт или демонстрационный чат";
     private string _status = "Готово", _activity = "", _previewNote = "Выберите вложение";
-    private bool _isBusy;
+    private bool _isBusy, _favoritesOnly;
     private ChatMessage? _selectedMessage;
     private Attachment? _selectedAttachment;
     private string? _selectedLink, _selectedMonth;
     private Bitmap? _previewImage;
     private Participant? _selectedParticipant;
     private KindOption _selectedKind;
+    private OrderOption _selectedOrder;
     private string _selectedTheme = "System";
     private double _fontSize = 15;
 
@@ -38,6 +43,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _services = services;
         _selectedKind = Kinds[0];
+        _selectedOrder = Orders[0];
         _session.Changed += OnSessionChanged;
         OpenCommand = new AsyncCommand(() => Guard(async () => { var path = await services.PickExportFolderAsync(); if (path is not null) await ImportCore(path); }));
         DemoCommand = new AsyncCommand(() => OpenPathAsync(Path.Combine(AppContext.BaseDirectory, "examples", "demo")));
@@ -56,6 +62,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }));
         ApplyCommand = new AsyncCommand(() => Guard(ApplyCore));
         ResetCommand = new AsyncCommand(() => Guard(async () => { ResetInputs(); await ApplyCore(); }));
+        FavoriteCommand = new AsyncCommand(() => Guard(async () =>
+        {
+            if (SelectedMessage is not { } message) return;
+            _session.ToggleFavorite(message.Id);
+            RaiseFavoriteProperties();
+            // Меняем только избранное, не применяя ещё не подтверждённые поля поиска.
+            _matches = await Task.Run(() => ChatSearch.Find(_session.Archive, _session.Query,
+                favoriteMessageIds: _session.FavoriteMessageIds));
+            _page = 0; ShowPage(); SelectId(message.Id);
+            Status = "Избранное изменено. Нажмите «Сохранить», чтобы продолжить с ним после перезапуска.";
+        }));
         NextPageCommand = new AsyncCommand(() => { if (!IsBusy && (_page + 1) * PageSize < _matches.Count) { _page++; ShowPage(); } return Task.CompletedTask; });
         PreviousPageCommand = new AsyncCommand(() => { if (!IsBusy && _page > 0) { _page--; ShowPage(); } return Task.CompletedTask; });
         JumpCommand = new AsyncCommand(() => Guard(() => JumpCore(ParseDate(JumpText, "Дата перехода"))));
@@ -74,8 +91,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OpenAttachmentCommand = new AsyncCommand(() => Guard(async () =>
         {
             if (SelectedAttachment is null) { Status = "Сначала выберите вложение."; return; }
+            if (SelectedAttachment.Kind == MessageKind.Photo)
+            {
+                await services.ShowPhotoAsync(_session.Archive, SelectedMessage!.Id, SelectedAttachment);
+                return;
+            }
             var path = SafePaths.ResolveMedia(_session.Archive.RootPath, SelectedAttachment.RelativePath);
-            await services.OpenAttachmentAsync(path); Status = "Вложение передано системному просмотрщику. При необходимости нажмите Play в его окне.";
+            if (!File.Exists(path)) throw new IOException("Файл не включён в экспорт или перемещён.");
+            await services.OpenAttachmentAsync(path, SelectedAttachment.Kind); Status = "Вложение открыто.";
         }));
         LinkCommand = new AsyncCommand(() => Guard(async () =>
         {
@@ -85,7 +108,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RelocateCommand = new AsyncCommand(() => Guard(async () =>
         {
             var path = await services.PickExportFolderAsync(); if (path is null) return;
-            _session.Replace(_session.Archive with { RootPath = path }, _session.Query, _session.SelectedMessageId);
+            _session.Replace(_session.Archive with { RootPath = path }, _session.Query, _session.SelectedMessageId, _session.FavoriteMessageIds);
             await UpdatePreview(); Status = "Новая папка медиа: " + path + ". Сохраните состояние.";
         }));
         HelpCommand = new AsyncCommand(() => services.ShowHelpAsync(HelpText));
@@ -99,6 +122,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<Participant> Participants { get; } = [];
     public ObservableCollection<string> Months { get; } = [];
     public IReadOnlyList<KindOption> Kinds { get; } = [new(MessageKind.All, "Все сообщения"), new(MessageKind.Text, "Все обычные сообщения"), new(MessageKind.Photo, "Фотографии"), new(MessageKind.Video, "Видео"), new(MessageKind.File, "Файлы"), new(MessageKind.Audio, "Аудио и голосовые"), new(MessageKind.Link, "Ссылки"), new(MessageKind.Poll, "Опросы"), new(MessageKind.Service, "Служебные события")];
+    public IReadOnlyList<OrderOption> Orders { get; } = [new(MessageOrder.OldestFirst, "Сначала старые"), new(MessageOrder.NewestFirst, "Сначала новые")];
     public string[] Themes { get; } = ["System", "Light", "Dark"];
     public double[] FontSizes { get; } = [12, 15, 18, 21];
     public string SearchText { get => _searchText; set => Set(ref _searchText, value); }
@@ -106,6 +130,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string ToText { get => _toText; set => Set(ref _toText, value); }
     public string JumpText { get => _jumpText; set => Set(ref _jumpText, value); }
     public KindOption SelectedKind { get => _selectedKind; set => Set(ref _selectedKind, value ?? Kinds[0]); }
+    public OrderOption SelectedOrder { get => _selectedOrder; set => Set(ref _selectedOrder, value ?? Orders[0]); }
+    public bool FavoritesOnly { get => _favoritesOnly; set => Set(ref _favoritesOnly, value); }
+    public string FavoriteSummary => $"В избранном: {_session.FavoriteMessageIds.Count}";
+    public string FavoriteButtonLabel => SelectedMessage is { } m && _session.FavoriteMessageIds.Contains(m.Id) ? "★ Убрать из избранного" : "☆ В избранное";
+    public bool HasSelectedMessage => SelectedMessage is not null;
     public Participant? SelectedParticipant { get => _selectedParticipant; set => Set(ref _selectedParticipant, value); }
     public string? SelectedMonth { get => _selectedMonth; set => Set(ref _selectedMonth, value); }
     public string SelectedTheme { get => _selectedTheme; set { if (Set(ref _selectedTheme, value)) ApplyTheme(); } }
@@ -125,7 +154,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             if (!Set(ref _selectedMessage, value)) return;
             _session.Select(value?.Id);
-            Raise(nameof(SelectedHeading)); Raise(nameof(Attachments)); Raise(nameof(Links));
+            Raise(nameof(SelectedHeading)); Raise(nameof(Attachments)); Raise(nameof(Links)); RaiseFavoriteProperties();
             SelectedAttachment = value?.Attachments.FirstOrDefault();
             SelectedLink = value?.Links.FirstOrDefault();
         }
@@ -147,6 +176,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ICommand ExportCommand { get; }
     public ICommand ApplyCommand { get; }
     public ICommand ResetCommand { get; }
+    public ICommand FavoriteCommand { get; }
     public ICommand NextPageCommand { get; }
     public ICommand PreviousPageCommand { get; }
     public ICommand JumpCommand { get; }
@@ -196,14 +226,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private async Task LoadCore(string path)
     {
         var state = await Task.Run(() => StateStore.LoadAsync(path));
-        var matches = await Task.Run(() => ChatSearch.Find(state.Archive, state.Query));
+        var favorites = state.FavoriteMessageIds?.ToHashSet();
+        var matches = await Task.Run(() => ChatSearch.Find(state.Archive, state.Query, favoriteMessageIds: favorites));
         // Старую работу заменяем после успешного чтения, проверки и построения результата.
-        CommitArchive(state.Archive, state.Query, state.SelectedMessageId, matches);
+        CommitArchive(state.Archive, state.Query, state.SelectedMessageId, matches, favorites);
         Status = Directory.Exists(state.Archive.RootPath) ? "Состояние восстановлено." : "Тексты восстановлены. Папка медиа отсутствует: нажмите «Папка медиа».";
     }
-    private void CommitArchive(ChatArchive archive, ChatQuery query, long? selected, IReadOnlyList<ChatMessage> matches)
+    private void CommitArchive(ChatArchive archive, ChatQuery query, long? selected, IReadOnlyList<ChatMessage> matches, IEnumerable<long>? favorites = null)
     {
-        _session.Replace(archive, query, selected);
+        _session.Replace(archive, query, selected, favorites);
+        RaiseFavoriteProperties();
         Title = archive.Name;
         Summary = $"{archive.Messages.Count} сообщений · {archive.Participants.Count} авторов · {archive.SourceFormat}";
         Participants.Clear(); Participants.Add(new("", "Все участники", archive.Messages.Count));
@@ -213,23 +245,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         JumpText = archive.Messages.FirstOrDefault()?.Date.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
         SearchText = query.Text; FromText = query.From?.ToString("yyyy-MM-dd") ?? ""; ToText = query.To?.ToString("yyyy-MM-dd") ?? "";
         SelectedKind = Kinds.FirstOrDefault(k => k.Value == query.Kind) ?? Kinds[0];
+        FavoritesOnly = query.FavoritesOnly; SelectedOrder = Orders.Single(o => o.Value == query.Order);
         SelectedParticipant = Participants.FirstOrDefault(p => p.Id == (query.SenderId ?? "")) ?? Participants[0];
         _matches = matches; _page = 0; ShowPage(); SelectId(selected);
     }
     private ChatQuery BuildQuery() => new(SearchText, SelectedKind.Value, string.IsNullOrEmpty(SelectedParticipant?.Id) ? null : SelectedParticipant.Id,
         string.IsNullOrWhiteSpace(FromText) ? null : ParseDate(FromText, "Начало периода"),
-        string.IsNullOrWhiteSpace(ToText) ? null : ParseDate(ToText, "Конец периода"));
+        string.IsNullOrWhiteSpace(ToText) ? null : ParseDate(ToText, "Конец периода"), FavoritesOnly, SelectedOrder.Value);
     private Task ApplyCore() => ApplyCore(false);
     private async Task ApplyCore(bool preserveSelection)
     {
         var selectedId = preserveSelection ? SelectedMessage?.Id : null;
         var query = BuildQuery();
-        var matches = await Task.Run(() => ChatSearch.Find(_session.Archive, query));
+        var matches = await Task.Run(() => ChatSearch.Find(_session.Archive, query, favoriteMessageIds: _session.FavoriteMessageIds));
         _session.SetQuery(query); _matches = matches; _page = 0; ShowPage();
         if (preserveSelection) SelectId(selectedId);
         Status = $"Найдено: {matches.Count}. Поиск включает текст, автора, названия файлов, ссылки и опросы.";
     }
-    private void ResetInputs() { SearchText = ""; FromText = ""; ToText = ""; SelectedKind = Kinds[0]; SelectedParticipant = Participants.FirstOrDefault(); }
+    private void ResetInputs() { SearchText = ""; FromText = ""; ToText = ""; SelectedKind = Kinds[0]; SelectedParticipant = Participants.FirstOrDefault(); FavoritesOnly = false; SelectedOrder = Orders[0]; }
+    private void RaiseFavoriteProperties() { Raise(nameof(FavoriteSummary)); Raise(nameof(FavoriteButtonLabel)); Raise(nameof(HasSelectedMessage)); }
     private void ShowPage()
     {
         // В ленту передаём только одну страницу, полный архив остаётся в Core.
@@ -262,7 +296,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var path = SafePaths.ResolveMedia(_session.Archive.RootPath, attachment.RelativePath);
             if (!File.Exists(path)) { PreviewNote = "Файл не включён в экспорт или перемещён. Текст переписки доступен."; return; }
             PreviewNote = $"{attachment.Name} · {new FileInfo(path).Length / 1024.0:F1} КиБ";
-            if (attachment.Kind != MessageKind.Photo) { PreviewNote += "\nНажмите «Открыть вложение». Нужен системный просмотрщик, поддерживающий этот формат."; return; }
+            if (attachment.Kind != MessageKind.Photo) { PreviewNote += OperatingSystem.IsMacOS() && attachment.Kind is MessageKind.Video or MessageKind.Audio
+                ? "\n«Открыть вложение» — проигрыватель ОС внутри приложения."
+                : "\nНажмите «Открыть вложение». Нужен системный просмотрщик, поддерживающий этот формат."; return; }
             if (new FileInfo(path).Length > 20 * 1024 * 1024) { PreviewNote += "\nИзображения свыше 20 МиБ: нажмите «Открыть вложение»."; return; }
             var bitmap = await Task.Run(() => { using var stream = File.OpenRead(path); return Bitmap.DecodeToWidth(stream, 640); });
             // Пока фото читалось, пользователь мог выбрать другое вложение.
@@ -284,11 +320,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     Telegram Chat Navigator
 
     1. «Демо» открывает вымышленный чат. «Открыть экспорт» — папку одного чата Telegram Desktop с result.json или messages.html.
-    2. Введите подстроку, выберите автора/категорию/период, нажмите «Найти» или Enter в поле поиска. Период: yyyy-MM-dd, обе границы включены.
+    2. Введите подстроку, выберите автора/категорию/период, «Только избранное» и порядок времени, нажмите «Найти» или Enter в поле поиска. Период: yyyy-MM-dd, обе границы включены. Кнопка ☆/★ справа добавляет или удаляет выбранное сообщение из избранного.
     3. Выберите сообщение. Справа — полный текст, опрос, список вложений и ссылок. «Контекст» снимает фильтры, сохраняя выбранное сообщение; «К ответу» находит исходное сообщение.
     4. «К дате»/«К месяцу» сбрасывает фильтры и выбирает первое сообщение не раньше даты. Лента показывает по 50 сообщений: «Назад»/«Далее».
-    5. Фото — внутри окна. «Открыть вложение»: macOS — QuickTime Player для MP4/WAV и других распространённых аудио/видеоформатов, приложение по умолчанию для документов, Windows — приложение по умолчанию, Linux — xdg-open в графическом сеансе. Нужен просмотрщик с поддержкой формата; при ошибке назначьте его в системе. Отсутствующее медиа повторно экспортируйте из Telegram.
-    6. «Сохранить» записывает тексты, фильтры, выбор и путь к медиа в *.tgnav.json. «Загрузить» продолжает работу. Переносите рядом всю папку экспорта; при смене пути нажмите «Папка медиа». CSV сохраняет текущие найденные сообщения и не заменяет состояние.
+    5. «Открыть вложение»: фото — своё окно с масштабом +/−, вписыванием (0) и переходами ←/→; Esc закрывает просмотр. На Mac аудио/видео — системный AVKit внутри окна навигатора: нажмите ▶, доступны пауза и перемотка. Если кодек не поддержан, есть внешнее открытие. Документы, Windows/Linux — системные внешние приложения; для Linux нужен xdg-open в графическом сеансе. Отсутствующее медиа повторно экспортируйте из Telegram.
+    6. «Сохранить» записывает тексты, избранное, фильтры, порядок, выбор и путь к медиа в *.tgnav.json. «Загрузить» продолжает работу. Переносите рядом всю папку экспорта; при смене пути нажмите «Папка медиа». Повторный импорт/«Демо» начинает работу без отметок. CSV сохраняет текущие найденные сообщения и не заменяет состояние.
     7. System/Light/Dark — системная/светлая/тёмная тема. Размер текста задаётся рядом. «Сохранить настройки» сохраняет их между запусками. При выходе чат автоматически не сохраняется: сначала нажмите «Сохранить».
 
     Клавиши: F1 — справка; Cmd+? — справка; Cmd+O — экспорт; Cmd+S — состояние; Cmd+L — загрузка состояния; Cmd+F — фокус поиска; Enter — поиск; стрелки — выбор в ленте; Tab/Shift+Tab — переход по полям.

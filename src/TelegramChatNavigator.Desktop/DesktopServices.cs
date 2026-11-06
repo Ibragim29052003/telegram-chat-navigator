@@ -31,7 +31,12 @@ public sealed class DesktopServices(Window owner) : IDesktopServices
         var dialog = new Window { Title = "Справка · Telegram Chat Navigator", Width = 720, Height = 620, MinWidth = 450, MinHeight = 350, Content = box, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         await dialog.ShowDialog(owner);
     }
-    public Task OpenAttachmentAsync(string path) => SystemAttachmentOpener.OpenAsync(path);
+    public Task OpenAttachmentAsync(string path, MessageKind kind = MessageKind.File) =>
+        OperatingSystem.IsMacOS() && kind is MessageKind.Video or MessageKind.Audio
+            ? new MediaViewerWindow(path).ShowDialog(owner)
+            : SystemAttachmentOpener.OpenAsync(path);
+    public Task ShowPhotoAsync(ChatArchive archive, long messageId, Attachment attachment) =>
+        new PhotoViewerWindow(archive, messageId, attachment).ShowDialog(owner);
     public Task OpenLinkAsync(string url)
     {
         if (!SafePaths.IsWebLink(url)) throw new IOException("Разрешены только HTTP/HTTPS-ссылки.");

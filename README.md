@@ -39,7 +39,7 @@ Avalonia не требует MAUI workload, Windows или виртуально�
 ./scripts/package-mac.sh
 ```
 
-Версия Mac-сборки: **1.0.1**. Результат: `artifacts/TelegramChatNavigator.app` и `artifacts/TelegramChatNavigator-osx-arm64.zip`.
+Версия Mac-сборки: **1.1.0**. Результат: `artifacts/TelegramChatNavigator.app` и `artifacts/TelegramChatNavigator-osx-arm64.zip`.
 В ZIP есть .NET runtime: отдельно устанавливать .NET для этой сборки не требуется.
 Архитектура — Apple Silicon, целевая macOS 14 и новее; фактически проверена macOS 27.0.
 Используется локальная ad-hoc подпись; notarization Apple не выполнялась.
@@ -75,8 +75,10 @@ dotnet run --project src/TelegramChatNavigator.Cli -- export /tmp/chat.tgnav.jso
 - Переписка с авторами, датами, полным текстом выбранного сообщения, ответами и результатами опросов.
 - Поиск по тексту, автору, имени файла, ссылкам и опросам; фильтры автора, типа и периода.
 - Переход по дню/месяцу, страницы по 50 сообщений; «Контекст» снимает фильтры с сохранением выбора.
-- Фото PNG/JPEG/WebP внутри окна; видео, аудио и документы открываются системными приложениями macOS, Windows и Linux.
-- Сохранение текста чата, фильтров, выбора и путей к медиа в `.tgnav.json`; восстановление без исходного JSON/HTML.
+- Фото PNG/JPEG/WebP: миниатюра и отдельное окно с масштабом и переходом между снимками.
+- Видео и аудио на Mac: AVKit внутри окна навигатора. На Windows/Linux — внешнее системное приложение.
+- Избранное с сохранением в состоянии, фильтр «Только избранное», порядок от старых или от новых сообщений.
+- Сохранение текста чата, избранного, фильтров, выбора и путей к медиа в `.tgnav.json`; восстановление без исходного JSON/HTML.
 - CSV текущих результатов; тема System/Light/Dark и размер текста с отдельным сохранением настроек.
 - F1 и Cmd+? — справка; Cmd+O/S/L/F — открыть экспорт, сохранить, загрузить, поиск.
   На Mac при мультимедийных клавишах используйте Fn+F1 либо кнопку «Справка».
@@ -112,11 +114,13 @@ CI выполняет restore/build/test и NuGet audit на Windows, Linux и m
 Полный экспорт аккаунта, `.7z`/ZIP без распаковки, произвольный HTML и восстановление чата в Telegram не поддерживаются.
 Участники — авторы из сохранённых сообщений; молчащих участников экспорт не позволяет восстановить.
 Медиа остаются внешними файлами. Поддержка кодеков зависит от установленного просмотрщика.
-Внешний плеер не встроен в Avalonia; фото отображаются внутри окна.
+На Mac системный AVPlayerView встроен через NativeControlHost. Неподдерживаемый AVKit файл можно передать внешнему приложению кнопкой в окне проигрывателя. Windows/Linux пока используют внешние проигрыватели.
 
 Первичные источники: [Telegram export](https://telegram.org/blog/export-and-more),
 [реализация JSON Telegram](https://github.com/telegramdesktop/tdesktop/blob/dev/Telegram/SourceFiles/export/output/export_output_json.cpp),
 [реализация HTML Telegram](https://github.com/telegramdesktop/tdesktop/blob/dev/Telegram/SourceFiles/export/output/export_output_html.cpp),
 [.NET на macOS](https://learn.microsoft.com/en-us/dotnet/core/install/macos),
 [Avalonia IDE](https://docs.avaloniaui.net/docs/get-started/set-up-your-ide),
-[упаковка macOS](https://docs.avaloniaui.net/docs/deployment/macos).
+[упаковка macOS](https://docs.avaloniaui.net/docs/deployment/macos),
+[встраивание нативных компонентов](https://docs.avaloniaui.net/docs/app-development/native-interop),
+[AVPlayerView](https://developer.apple.com/documentation/avkit/avplayerview).

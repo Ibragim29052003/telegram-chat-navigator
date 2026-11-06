@@ -17,7 +17,7 @@ internal static class Cli
             var options = new Dictionary<string, string>();
             for (var i = 2; i < args.Length; i += 2)
             {
-                if (i + 1 >= args.Length || !new[] { "--text", "--kind", "--sender", "--from", "--to", "--out", "--limit" }.Contains(args[i]) || !options.TryAdd(args[i], args[i + 1]))
+                if (i + 1 >= args.Length || !new[] { "--text", "--kind", "--sender", "--from", "--to", "--out", "--limit", "--favorites-only", "--order" }.Contains(args[i]) || !options.TryAdd(args[i], args[i + 1]))
                     throw new ArgumentException($"Неизвестный, повторный или неполный параметр: {args[i]}");
             }
             string Get(string key, string fallback = "") => options.GetValueOrDefault(key, fallback);
@@ -25,7 +25,7 @@ internal static class Cli
             if (args[1].EndsWith(".tgnav.json", StringComparison.OrdinalIgnoreCase))
             {
                 var state = await StateStore.LoadAsync(args[1]);
-                session.Replace(state.Archive, state.Query, state.SelectedMessageId);
+                session.Replace(state.Archive, state.Query, state.SelectedMessageId, state.FavoriteMessageIds);
             }
             else session.Replace(await new ChatImporter().ReadAsync(args[1]));
             var query = session.Query;
@@ -38,9 +38,16 @@ internal static class Cli
             }
             if (options.ContainsKey("--from")) query = query with { From = ParseDate(Get("--from")) };
             if (options.ContainsKey("--to")) query = query with { To = ParseDate(Get("--to")) };
+            if (options.ContainsKey("--favorites-only"))
+            {
+                if (!bool.TryParse(Get("--favorites-only"), out var only)) throw new ArgumentException("--favorites-only: true или false.");
+                query = query with { FavoritesOnly = only };
+            }
+            if (options.ContainsKey("--order"))
+                query = query with { Order = Get("--order") switch { "oldest" => MessageOrder.OldestFirst, "newest" => MessageOrder.NewestFirst, _ => throw new ArgumentException("--order: oldest или newest.") } };
             if (query.SenderId is not null && !session.Archive.Participants.Any(p => p.Id == query.SenderId))
                 throw new ArgumentException("Участник не найден. Получите ID командой participants.");
-            var matches = ChatSearch.Find(session.Archive, query);
+            var matches = ChatSearch.Find(session.Archive, query, favoriteMessageIds: session.FavoriteMessageIds);
             session.SetQuery(query);
             if (command == "participants") foreach (var p in session.Archive.Participants) Console.WriteLine($"{p.Id}\t{p.Name}\t{p.MessageCount}");
             else if (command == "inspect")
@@ -81,6 +88,8 @@ internal static class Cli
     --sender ID         ID из команды participants; HTML группирует авторов по имени
     --from yyyy-MM-dd   С начала дня включительно
     --to yyyy-MM-dd     До конца дня включительно
+    --favorites-only BOOL Только избранное из состояния: true или false
+    --order ПОРЯДОК     oldest (сначала старые) или newest (сначала новые)
     --limit ЧИСЛО       Сколько результатов печатать (1–10000; по умолчанию 50)
     --out ПУТЬ         Для save-state (.tgnav.json) и export (.csv)
     --help              Справка

@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace TelegramChatNavigator.Core;
 
 public sealed record NavigatorState(int Version, string MediaRoot, ChatArchive Archive,
-    ChatQuery Query, long? SelectedMessageId);
+    ChatQuery Query, long? SelectedMessageId, IReadOnlyList<long>? FavoriteMessageIds = null);
 public sealed record UserPreferences(int Version = 1, string Theme = "System", double FontSize = 15);
 
 public static class StateStore
@@ -18,7 +18,8 @@ public static class StateStore
     {
         // Между разными дисками Windows относительного пути нет: .NET вернёт абсолютный.
         var mediaRoot = Path.GetRelativePath(Path.GetDirectoryName(Path.GetFullPath(path))!, session.Archive.RootPath);
-        var state = new NavigatorState(1, mediaRoot, session.Archive, session.Query, session.SelectedMessageId);
+        var state = new NavigatorState(1, mediaRoot, session.Archive, session.Query, session.SelectedMessageId,
+            session.FavoriteMessageIds.Order().ToArray());
         Validate(state);
         return AtomicWriteAsync(path, state, ct);
     }
@@ -46,7 +47,7 @@ public static class StateStore
             throw new ChatFormatException("В состоянии отсутствуют обязательные поля.");
         var messages = state.Archive.Messages;
         if (messages.Count > ImportSupport.MaxMessages || state.Archive.Name is null || state.Query.From > state.Query.To ||
-            !Enum.IsDefined(state.Query.Kind)) throw new ChatFormatException("Некорректные параметры состояния.");
+            !Enum.IsDefined(state.Query.Kind) || !Enum.IsDefined(state.Query.Order)) throw new ChatFormatException("Некорректные параметры состояния.");
         var ids = new HashSet<long>();
         DateTime previous = DateTime.MinValue;
         foreach (var m in messages)
@@ -62,6 +63,10 @@ public static class StateStore
         }
         if (state.SelectedMessageId is not null && !ids.Contains(state.SelectedMessageId.Value))
             throw new ChatFormatException("Выбранное сообщение отсутствует в состоянии.");
+        // В старых файлах версии 1 этого поля нет: это означает пустое избранное.
+        if (state.FavoriteMessageIds is { } favorites &&
+            (favorites.Count > ids.Count || favorites.Distinct().Count() != favorites.Count || favorites.Any(id => !ids.Contains(id))))
+            throw new ChatFormatException("Некорректный список избранных сообщений.");
         if (state.Query.SenderId is not null && !messages.Any(m => m.SenderId == state.Query.SenderId))
             throw new ChatFormatException("Участник фильтра отсутствует в состоянии.");
     }
